@@ -1,0 +1,41 @@
+{
+  "name": "TransformCustomerMetrics",
+  "properties": {
+    "activities": [
+      {
+        "name": "RunCustomerDataFlow",
+        "type": "ExecuteDataFlow",
+        "typeProperties": {
+          "dataflow": {
+            "referenceName": "CustomerMetricsFlow",
+            "type": "DataFlowReference"
+          }
+        }
+      },
+      {
+        "name": "CopyMetricsToReporting",
+        "type": "Copy",
+        "inputs": [
+          {
+            "referenceName": "SqlCustomerMetrics",
+            "type": "DatasetReference"
+          }
+        ],
+        "outputs": [
+          {
+            "referenceName": "SqlReportingCustomerSummary",
+            "type": "DatasetReference"
+          }
+        ],
+        "typeProperties": {
+          "source": {
+            "type": "AzureSqlSource"
+          },
+          "sink": {
+            "type": "AzureSqlSink"
+          }
+        }
+      }
+    ]
+  }
+}

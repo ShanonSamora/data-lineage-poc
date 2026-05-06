@@ -1,0 +1,445 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Data Lineage Explorer</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/vis-network/9.1.6/vis-network.min.js"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/vis-network/9.1.6/vis-network.min.css" rel="stylesheet">
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body { font-family: 'Segoe UI', system-ui, -apple-system, sans-serif; background: #0f172a; color: #e2e8f0; }
+
+        .header {
+            background: #1e293b; border-bottom: 1px solid #334155;
+            padding: 16px 24px; display: flex; align-items: center; gap: 16px;
+        }
+        .header h1 { font-size: 20px; font-weight: 600; color: #f8fafc; }
+        .header .subtitle { font-size: 13px; color: #94a3b8; margin-left: 4px; }
+
+        .toolbar {
+            background: #1e293b; border-bottom: 1px solid #334155;
+            padding: 12px 24px; display: flex; gap: 12px; align-items: center; flex-wrap: wrap;
+        }
+        .btn {
+            padding: 8px 16px; border: 1px solid #475569; border-radius: 6px;
+            background: #334155; color: #e2e8f0; cursor: pointer; font-size: 13px;
+            transition: all 0.15s;
+        }
+        .btn:hover { background: #475569; }
+        .btn-primary { background: #2563eb; border-color: #3b82f6; }
+        .btn-primary:hover { background: #1d4ed8; }
+        .btn-success { background: #059669; border-color: #10b981; }
+        .btn-success:hover { background: #047857; }
+
+        .search-box {
+            padding: 8px 12px; border: 1px solid #475569; border-radius: 6px;
+            background: #0f172a; color: #e2e8f0; font-size: 13px; width: 300px;
+        }
+        .search-box::placeholder { color: #64748b; }
+
+        .main { display: flex; height: calc(100vh - 120px); }
+        #graph-container { flex: 1; background: #0f172a; }
+
+        .sidebar {
+            width: 360px; background: #1e293b; border-left: 1px solid #334155;
+            overflow-y: auto; padding: 16px;
+        }
+        .sidebar h2 { font-size: 15px; color: #94a3b8; margin-bottom: 12px; text-transform: uppercase; letter-spacing: 0.05em; }
+
+        .node-detail { background: #0f172a; border-radius: 8px; padding: 14px; margin-bottom: 12px; }
+        .node-detail .label { font-size: 11px; color: #64748b; text-transform: uppercase; margin-bottom: 2px; }
+        .node-detail .value { font-size: 14px; color: #f1f5f9; word-break: break-all; }
+
+        .badge {
+            display: inline-block; padding: 2px 8px; border-radius: 4px;
+            font-size: 11px; font-weight: 600; text-transform: uppercase;
+        }
+        .badge-table { background: #1e3a5f; color: #60a5fa; }
+        .badge-view { background: #1a3636; color: #34d399; }
+        .badge-column { background: #3b1f4b; color: #c084fc; }
+        .badge-procedure { background: #422006; color: #fb923c; }
+        .badge-file { background: #1c1917; color: #a8a29e; }
+        .badge-python { background: #1a2332; color: #fbbf24; }
+
+        .confidence-bar {
+            height: 4px; border-radius: 2px; background: #334155; margin-top: 4px;
+        }
+        .confidence-fill { height: 100%; border-radius: 2px; }
+        .confidence-high { background: #22c55e; }
+        .confidence-medium { background: #f59e0b; }
+
+        .stats {
+            display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 16px;
+        }
+        .stat-card {
+            background: #0f172a; border-radius: 8px; padding: 12px; text-align: center;
+        }
+        .stat-card .num { font-size: 24px; font-weight: 700; color: #f8fafc; }
+        .stat-card .lbl { font-size: 11px; color: #64748b; margin-top: 2px; }
+
+        .toast {
+            position: fixed; bottom: 24px; right: 24px; padding: 12px 20px;
+            background: #1e293b; border: 1px solid #334155; border-radius: 8px;
+            font-size: 13px; color: #e2e8f0; opacity: 0; transition: opacity 0.3s;
+            z-index: 100;
+        }
+        .toast.show { opacity: 1; }
+
+        .legend {
+            display: flex; gap: 12px; margin-left: auto; font-size: 12px;
+        }
+        .legend-item { display: flex; align-items: center; gap: 4px; }
+        .legend-dot {
+            width: 10px; height: 10px; border-radius: 50%;
+        }
+
+        .empty-state {
+            display: flex; flex-direction: column; align-items: center;
+            justify-content: center; height: 100%; color: #64748b; font-size: 15px;
+        }
+        .empty-state .icon { font-size: 48px; margin-bottom: 16px; }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>Data Lineage Explorer</h1>
+        <span class="subtitle">Static Analysis with AI — Column-Level Lineage</span>
+        <div class="legend">
+            <div class="legend-item"><div class="legend-dot" style="background:#60a5fa"></div> Table</div>
+            <div class="legend-item"><div class="legend-dot" style="background:#34d399"></div> View</div>
+            <div class="legend-item"><div class="legend-dot" style="background:#c084fc"></div> Column</div>
+            <div class="legend-item"><div class="legend-dot" style="background:#fb923c"></div> Procedure</div>
+            <div class="legend-item"><div class="legend-dot" style="background:#fbbf24"></div> Python</div>
+            <div class="legend-item"><div class="legend-dot" style="background:#a8a29e"></div> File</div>
+        </div>
+    </div>
+
+    <div class="toolbar">
+        <button class="btn btn-primary" onclick="analyzeRepo(false)">Analyze (Neo4j)</button>
+        <button class="btn btn-success" onclick="analyzeRepo(true)">Analyze (Local)</button>
+        <input class="search-box" id="search" type="text" placeholder="Search tables, columns... (Enter)" onkeydown="if(event.key==='Enter')searchNodes()">
+        <button class="btn" onclick="searchNodes()">Search</button>
+        <button class="btn" onclick="resetView()">Reset View</button>
+    </div>
+
+    <div class="main">
+        <div id="graph-container">
+            <div class="empty-state" id="empty-state">
+                <div class="icon">⬡</div>
+                <div>Click <strong>Analyze</strong> to scan the repository and build lineage</div>
+                <div style="margin-top:8px;font-size:13px">Use <strong>Local</strong> mode if Neo4j is not running</div>
+            </div>
+        </div>
+        <div class="sidebar" id="sidebar">
+            <h2>Overview</h2>
+            <div class="stats" id="stats">
+                <div class="stat-card"><div class="num" id="stat-nodes">—</div><div class="lbl">Nodes</div></div>
+                <div class="stat-card"><div class="num" id="stat-edges">—</div><div class="lbl">Edges</div></div>
+                <div class="stat-card"><div class="num" id="stat-tables">—</div><div class="lbl">Tables</div></div>
+                <div class="stat-card"><div class="num" id="stat-columns">—</div><div class="lbl">Columns</div></div>
+            </div>
+            <div id="detail-panel">
+                <p style="color:#64748b;font-size:13px">Click a node to see details, upstream/downstream lineage.</p>
+            </div>
+        </div>
+    </div>
+
+    <div class="toast" id="toast"></div>
+
+    <script>
+    let network = null;
+    let allData = { nodes: [], edges: [] };
+    let useLocal = false;
+
+    const NODE_COLORS = {
+        TABLE:           { background: '#1e3a5f', border: '#60a5fa', highlight: { background: '#2563eb', border: '#93c5fd' } },
+        VIEW:            { background: '#1a3636', border: '#34d399', highlight: { background: '#059669', border: '#6ee7b7' } },
+        COLUMN:          { background: '#3b1f4b', border: '#c084fc', highlight: { background: '#7c3aed', border: '#d8b4fe' } },
+        PROCEDURE:       { background: '#422006', border: '#fb923c', highlight: { background: '#c2410c', border: '#fdba74' } },
+        PYTHON_FUNCTION: { background: '#1a2332', border: '#fbbf24', highlight: { background: '#b45309', border: '#fde68a' } },
+        FILE:            { background: '#1c1917', border: '#a8a29e', highlight: { background: '#44403c', border: '#d6d3d1' } },
+    };
+    const NODE_SHAPES = {
+        TABLE: 'box', VIEW: 'box', COLUMN: 'dot',
+        PROCEDURE: 'diamond', PYTHON_FUNCTION: 'diamond', FILE: 'triangle',
+    };
+
+    const EDGE_COLORS = {
+        DERIVES_FROM: '#c084fc',
+        READS_FROM:   '#60a5fa',
+        WRITES_TO:    '#f87171',
+        HAS_COLUMN:   '#475569',
+        DEFINED_IN:   '#334155',
+    };
+
+    function toast(msg) {
+        const t = document.getElementById('toast');
+        t.textContent = msg;
+        t.classList.add('show');
+        setTimeout(() => t.classList.remove('show'), 3000);
+    }
+
+    async function analyzeRepo(local) {
+        useLocal = local;
+        const endpoint = local ? '/analyze-local' : '/analyze';
+        toast('Analyzing repository...');
+        try {
+            const res = await fetch(endpoint, { method: 'POST' });
+            const data = await res.json();
+            if (!res.ok) { toast('Error: ' + (data.detail || 'unknown')); return; }
+            toast(`Done: ${data.nodes_extracted} nodes, ${data.edges_extracted} edges`);
+            await loadGraph();
+        } catch (e) {
+            toast('Error: ' + e.message);
+        }
+    }
+
+    async function loadGraph() {
+        const endpoint = useLocal ? '/graph-local' : '/graph';
+        const res = await fetch(endpoint);
+        allData = await res.json();
+        renderGraph(allData);
+    }
+
+    function renderGraph(data) {
+        document.getElementById('empty-state').style.display = 'none';
+
+        const nodes = data.nodes.map(n => {
+            const nt = n.node_type || 'TABLE';
+            return {
+                id: n.id,
+                label: n.name || n.id,
+                shape: NODE_SHAPES[nt] || 'dot',
+                color: NODE_COLORS[nt] || NODE_COLORS.TABLE,
+                font: { color: '#e2e8f0', size: nt === 'COLUMN' ? 10 : 13 },
+                size: nt === 'COLUMN' ? 8 : (nt === 'FILE' ? 12 : 20),
+                _type: nt,
+                _meta: n.metadata || '',
+            };
+        });
+
+        const edges = data.edges.map((e, i) => {
+            const et = e.edge_type || e.type || 'DERIVES_FROM';
+            const conf = e.confidence != null ? e.confidence : 1.0;
+            return {
+                id: 'e' + i,
+                from: e.source_id || e.source,
+                to: e.target_id || e.target,
+                arrows: 'to',
+                color: { color: EDGE_COLORS[et] || '#475569', opacity: 0.7 },
+                dashes: conf < 1.0,
+                width: et === 'DERIVES_FROM' ? 2 : 1,
+                label: et === 'DERIVES_FROM' && e.transformation ? e.transformation.substring(0, 30) : '',
+                font: { color: '#64748b', size: 9 },
+                _type: et,
+                _confidence: conf,
+                _transformation: e.transformation || '',
+            };
+        });
+
+        // Update stats
+        document.getElementById('stat-nodes').textContent = nodes.length;
+        document.getElementById('stat-edges').textContent = edges.length;
+        document.getElementById('stat-tables').textContent = nodes.filter(n => n._type === 'TABLE' || n._type === 'VIEW').length;
+        document.getElementById('stat-columns').textContent = nodes.filter(n => n._type === 'COLUMN').length;
+
+        const container = document.getElementById('graph-container');
+        const visData = {
+            nodes: new vis.DataSet(nodes),
+            edges: new vis.DataSet(edges),
+        };
+        const options = {
+            physics: {
+                solver: 'forceAtlas2Based',
+                forceAtlas2Based: { gravitationalConstant: -80, centralGravity: 0.01, springLength: 120 },
+                stabilization: { iterations: 200 },
+            },
+            interaction: { hover: true, tooltipDelay: 200, zoomView: true },
+            layout: { improvedLayout: true },
+        };
+
+        network = new vis.Network(container, visData, options);
+        network.on('click', (params) => {
+            if (params.nodes.length > 0) showNodeDetail(params.nodes[0]);
+        });
+    }
+
+    async function showNodeDetail(nodeId) {
+        const node = allData.nodes.find(n => n.id === nodeId);
+        if (!node) return;
+
+        const nt = node.node_type || 'TABLE';
+        const badgeClass = 'badge badge-' + nt.toLowerCase().replace('_', '-');
+
+        let html = `
+            <h2>Node Detail</h2>
+            <div class="node-detail">
+                <div class="label">ID</div>
+                <div class="value">${escHtml(node.id)}</div>
+            </div>
+            <div class="node-detail">
+                <div class="label">Name</div>
+                <div class="value">${escHtml(node.name || node.id)}</div>
+            </div>
+            <div class="node-detail">
+                <div class="label">Type</div>
+                <div class="value"><span class="${badgeClass}">${nt}</span></div>
+            </div>
+        `;
+
+        // Upstream / downstream buttons
+        html += `
+            <div style="display:flex;gap:8px;margin:12px 0">
+                <button class="btn" onclick="traceLineage('${escAttr(nodeId)}','upstream')">↑ Upstream</button>
+                <button class="btn" onclick="traceLineage('${escAttr(nodeId)}','downstream')">↓ Downstream</button>
+                <button class="btn" onclick="showImpact('${escAttr(nodeId)}')">Impact</button>
+            </div>
+        `;
+
+        // Show connected edges
+        const connected = allData.edges.filter(e =>
+            (e.source_id || e.source) === nodeId || (e.target_id || e.target) === nodeId
+        );
+        if (connected.length > 0) {
+            html += `<h2 style="margin-top:16px">Connections (${connected.length})</h2>`;
+            for (const e of connected.slice(0, 20)) {
+                const et = e.edge_type || e.type || '';
+                const conf = e.confidence != null ? e.confidence : 1.0;
+                const confClass = conf >= 1.0 ? 'confidence-high' : 'confidence-medium';
+                html += `
+                    <div class="node-detail">
+                        <div class="label">${escHtml(et)}</div>
+                        <div class="value" style="font-size:12px">${escHtml((e.source_id||e.source))} → ${escHtml((e.target_id||e.target))}</div>
+                        ${e.transformation ? `<div style="color:#94a3b8;font-size:11px;margin-top:4px">${escHtml(e.transformation)}</div>` : ''}
+                        <div class="confidence-bar"><div class="confidence-fill ${confClass}" style="width:${conf*100}%"></div></div>
+                    </div>
+                `;
+            }
+        }
+
+        document.getElementById('detail-panel').innerHTML = html;
+    }
+
+    async function traceLineage(nodeId, direction) {
+        const endpoint = useLocal ? null : `/${direction}/${encodeURIComponent(nodeId)}`;
+        if (!endpoint) {
+            // Local mode: compute from in-memory data
+            highlightSubgraph(nodeId, direction);
+            return;
+        }
+        try {
+            const res = await fetch(endpoint);
+            if (!res.ok) { toast(`No ${direction} found`); return; }
+            const data = await res.json();
+            renderGraph(data);
+            toast(`Showing ${direction} lineage for ${nodeId}`);
+        } catch (e) {
+            toast('Error: ' + e.message);
+        }
+    }
+
+    function highlightSubgraph(nodeId, direction) {
+        // BFS traversal in-memory for local mode
+        const visited = new Set([nodeId]);
+        const queue = [nodeId];
+        while (queue.length > 0) {
+            const current = queue.shift();
+            for (const e of allData.edges) {
+                const src = e.source_id || e.source;
+                const tgt = e.target_id || e.target;
+                let next = null;
+                if (direction === 'upstream' && src === current) next = tgt;
+                if (direction === 'downstream' && tgt === current) next = src;
+                if (next && !visited.has(next)) {
+                    visited.add(next);
+                    queue.push(next);
+                }
+            }
+        }
+        // Highlight in network
+        if (network) {
+            const nodeIds = Array.from(visited);
+            network.selectNodes(nodeIds);
+            toast(`${direction}: ${nodeIds.length} nodes`);
+        }
+    }
+
+    async function showImpact(nodeId) {
+        if (useLocal) {
+            traceLineage(nodeId, 'downstream');
+            return;
+        }
+        try {
+            const res = await fetch(`/impact/${encodeURIComponent(nodeId)}`);
+            const data = await res.json();
+            let html = `
+                <h2>Impact Analysis</h2>
+                <div class="node-detail">
+                    <div class="label">Source</div>
+                    <div class="value">${escHtml(data.source)}</div>
+                </div>
+                <div class="node-detail">
+                    <div class="label">Total Affected</div>
+                    <div class="value" style="font-size:24px;font-weight:700;color:#f87171">${data.total_affected}</div>
+                </div>
+            `;
+            if (data.affected_tables.length) {
+                html += `<div class="node-detail"><div class="label">Affected Tables</div>`;
+                for (const t of data.affected_tables) html += `<div class="value" style="font-size:12px">• ${escHtml(t)}</div>`;
+                html += `</div>`;
+            }
+            if (data.affected_columns.length) {
+                html += `<div class="node-detail"><div class="label">Affected Columns (first 20)</div>`;
+                for (const c of data.affected_columns.slice(0, 20)) html += `<div class="value" style="font-size:12px">• ${escHtml(c)}</div>`;
+                html += `</div>`;
+            }
+            document.getElementById('detail-panel').innerHTML = html;
+        } catch (e) {
+            toast('Error: ' + e.message);
+        }
+    }
+
+    async function searchNodes() {
+        const q = document.getElementById('search').value.trim();
+        if (!q) return;
+
+        if (useLocal) {
+            // Local search
+            const matching = allData.nodes.filter(n =>
+                n.id.toLowerCase().includes(q.toLowerCase()) || (n.name||'').toLowerCase().includes(q.toLowerCase())
+            );
+            if (matching.length && network) {
+                network.selectNodes(matching.map(n => n.id));
+                network.focus(matching[0].id, { scale: 1.2, animation: true });
+                toast(`Found ${matching.length} nodes`);
+            } else {
+                toast('No matches found');
+            }
+            return;
+        }
+
+        try {
+            const res = await fetch(`/search?q=${encodeURIComponent(q)}`);
+            const data = await res.json();
+            if (data.length && network) {
+                network.selectNodes(data.map(n => n.id));
+                network.focus(data[0].id, { scale: 1.2, animation: true });
+                toast(`Found ${data.length} nodes`);
+            } else {
+                toast('No matches found');
+            }
+        } catch (e) {
+            toast('Error: ' + e.message);
+        }
+    }
+
+    function resetView() {
+        if (allData.nodes.length) renderGraph(allData);
+    }
+
+    function escHtml(s) { const d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
+    function escAttr(s) { return s.replace(/'/g, "\\'").replace(/"/g, '&quot;'); }
+    </script>
+</body>
+</html>

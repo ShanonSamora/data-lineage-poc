@@ -1,0 +1,14 @@
+{
+  "name": "SqlRawCustomers",
+  "properties": {
+    "type": "AzureSqlTable",
+    "linkedServiceName": {
+      "referenceName": "AzureSqlDatabase",
+      "type": "LinkedServiceReference"
+    },
+    "typeProperties": {
+      "schema": "raw",
+      "table": "customers"
+    }
+  }
+}

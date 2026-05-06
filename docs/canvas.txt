@@ -1,0 +1,289 @@
+Business advice first: Start with services. Seriously.
+This is counterintuitive when you're excited about a SaaS idea, but here's the logic:
+
+Services give you the 3 things you don't have yet:
+
+Cash flow — SaaS takes 12-18 months to generate meaningful revenue. Services generate money in week 1.
+Deep customer access — When you're inside a bank doing a data project, you see their real problems, their real infrastructure, their real pain points. You can't get this from sales calls.
+Credibility — "We've done data governance projects for 3 banks" is 100x more convincing than "we built a tool, want to try it?"
+The playbook that actually works:
+
+Months 1-6: Do 2-3 consulting projects (data engineering, pipeline audits, compliance prep) through your friend's contacts
+During those projects: you'll see the lineage problem firsthand, repeatedly. You'll validate your thesis.
+Months 6-12: Build the product based on what you learned. Your first consulting clients become your first SaaS customers.
+Month 12+: Transition from "consultancy that has a product" to "product company that does implementation services"
+This is how Palantir, Databricks, and even dbt Labs started — services first, product second. It's not either/or; the services fund and validate the product.
+
+For the thesis: none of this matters. The thesis evaluates the technical method. Keep it focused there.
+
+
+Plataforma de Data Lineage Automatizado con IA para el Sector Financiero
+
+Grupo: Shanon, Camila Szesko, Carlos Lazzarino, Candela Santos.
+
+───────────────────────────────────────────────────
+PROBLEMA
+───────────────────────────────────────────────────
+
+Durante mi experiencia laboral en proyectos de datos, noté un problema
+recurrente: no se sabe realmente cuál es el origen de una columna de datos
+crítica. En fintech y servicios financieros esto es aún más grave porque
+las regulaciones (BCBS 239, SOX, MiFID II) exigen trazabilidad completa.
+
+Cuando un regulador pregunta "¿de dónde viene este número en el reporte?",
+muchas empresas no pueden responder con certeza. Esto genera multas,
+observaciones de auditoría y riesgo reputacional.
+
+Las soluciones existentes son:
+  • Incompletas: OpenLineage y Marquez capturan lineage en runtime, no
+    desde código fuente. No ven SQL estático, Python ni pipelines de ADF.
+  • Prohibitivamente caras: Collibra y Atlan cuestan USD 100k–500k anuales,
+    fuera del alcance de fintechs y bancos medianos.
+  • Manuales: muchas empresas documentan el lineage en spreadsheets o
+    wikis, que se desactualizan inmediatamente.
+
+Existe un vacío intermedio: empresas que necesitan lineage a nivel columna
+con integración continua, pero que no pueden (ni necesitan) pagar por una
+suite completa de data governance enterprise.
+
+
+───────────────────────────────────────────────────
+PROPUESTA DE VALOR
+───────────────────────────────────────────────────
+
+Una plataforma SaaS B2B que reconstruye automáticamente el linaje de datos
+a nivel columna analizando el código fuente (SQL, Python, Spark, ADF)
+directamente desde los repositorios Git del cliente.
+
+Diferenciadores clave:
+
+  1. Code-first: el lineage se extrae automáticamente del código,
+     no se documenta manualmente. Siempre está actualizado.
+
+  2. Enfoque híbrido (determinístico + IA): parsing determinístico con
+     sqlglot para SQL estándar, con fallback a LLM para SQL dinámico,
+     stored procedures y código Python/Spark.
+
+  3. Integración CI/CD: en cada Pull Request, la plataforma analiza el
+     impacto del cambio en el linaje y comenta automáticamente qué
+     tablas/columnas downstream se ven afectadas. Esto PREVIENE problemas
+     antes de que lleguen a producción.
+
+  4. Multi-repositorio: soporta lineage que cruza múltiples repositorios
+     (ej: un repo de SQL warehouse + un repo de pipelines Python + un
+     repo de ADF), algo que dbt y herramientas similares no hacen.
+
+  5. Precio accesible: USD 500–2,000/mes vs. USD 100k+ de Collibra/Atlan.
+
+NO es: un data catalog completo, ni una herramienta de data quality, ni un
+orquestador. Es lineage puro, automatizado y continuo.
+
+
+───────────────────────────────────────────────────
+1. SEGMENTO DE CLIENTES
+───────────────────────────────────────────────────
+
+Segmento inicial (beachhead):
+
+  Equipos de datos y compliance (5–20 personas) en fintechs o bancos
+  medianos (50–300 empleados) en Latinoamérica que:
+
+  • Tienen pipelines de datos multi-herramienta (SQL + Python/Spark + ADF
+    u otros orquestadores), no un solo stack como dbt puro
+  • Están atravesando o preparándose para una auditoría regulatoria
+    (BCBS 239, SOX, regulación del banco central local)
+  • Usan Git para versionar su código de datos
+  • No tienen presupuesto para Collibra/Atlan (USD 100k+ anuales)
+  • Han tenido al menos un incidente donde no pudieron rastrear el origen
+    de un dato crítico en un reporte regulatorio
+
+  Trigger de compra: El momento entre "nos notificaron una auditoría /
+  inspección regulatoria" y "la auditoría es en 3–6 meses". Ahí es cuando
+  buscan soluciones con urgencia.
+
+¿Por qué este segmento?
+  — El dolor es agudo y urgente (regulación con deadline concreto)
+  — Tienen presupuesto disponible (USD 500–2,000/mes es accesible)
+  — Tienen madurez técnica (Git = infraestructura lista para análisis
+    automático de código)
+  — No están locked-in a un vendor enterprise
+  — Canal de acceso directo: contactos en el sector bancario argentino
+
+Segmento secundario (expansión inmediata):
+
+  Equipos de datos en fintechs de la región que NO están en auditoría
+  activa pero que necesitan la plataforma para uso operativo diario:
+  análisis de impacto previo a cada cambio en producción.
+
+NO buscamos (por ahora):
+  — Empresas que ya usen Informatica o Collibra (locked-in contractual)
+  — Startups pre-seed sin pipelines de datos definidos
+  — Grandes corporaciones con más de 1,000 empleados
+  — Empresas que no hayan tenido problemas de compliance / trazabilidad
+
+
+───────────────────────────────────────────────────
+2. RELACIÓN CON EL CLIENTE
+───────────────────────────────────────────────────
+
+  • Onboarding asistido: conexión guiada a sus repos Git en las primeras
+    2 semanas. Primer mapa de lineage visible en < 1 hora.
+  • Self-service post-onboarding: dashboard web donde el equipo explora
+    el lineage, busca tablas/columnas y genera reportes de compliance.
+  • Alertas automáticas: notificación en cada PR con análisis de impacto.
+  • Soporte técnico: chat + email con SLA de respuesta.
+  • Revisiones trimestrales: call con el equipo de datos para revisar
+    cobertura del lineage y sugerir mejoras.
+
+
+───────────────────────────────────────────────────
+3. CANALES
+───────────────────────────────────────────────────
+
+  • Venta directa (principal): a través de contactos existentes en el
+    sector bancario y fintech argentino. Primeros 5–10 clientes.
+  • Contenido técnico: blog posts, charlas en meetups de datos (PyData,
+    DataEngineering LATAM), artículos sobre compliance + lineage.
+  • Referidos: programa de referidos entre equipos de datos que se conocen
+    entre sí (comunidad relativamente chica en LATAM).
+  • GitHub: el motor de parsing open-source genera visibilidad técnica
+    y confianza. Los leads técnicos lo descubren, lo prueban, y piden
+    la versión hosted.
+  • Marketplace de GitHub/Azure DevOps: la integración CI/CD como punto
+    de entrada.
+
+
+───────────────────────────────────────────────────
+4. ACTIVIDADES CLAVE
+───────────────────────────────────────────────────
+
+  • Desarrollo y mejora continua de los parsers (SQL, Python, ADF, Spark)
+  • Mantenimiento de la plataforma SaaS (infraestructura, seguridad, uptime)
+  • Onboarding de nuevos clientes
+  • Validación de precisión del lineage (métricas de accuracy)
+  • Desarrollo del dashboard de exploración y reportes regulatorios
+  • Generación de contenido técnico y presencia en comunidades
+
+
+───────────────────────────────────────────────────
+5. RECURSOS CLAVE
+───────────────────────────────────────────────────
+
+  • Motor de parsing híbrido (determinístico + LLM) — propiedad intelectual
+  • Base de datos de grafos (Neo4j) para almacenar y consultar lineage
+  • Integraciones con GitHub, Azure DevOps, GitLab
+  • Equipo técnico con experiencia en data engineering
+  • Red de contactos en el sector financiero (canal de distribución)
+  • API de LLM (OpenAI/Azure OpenAI) para parsing de código complejo
+
+
+───────────────────────────────────────────────────
+6. SOCIOS CLAVE
+───────────────────────────────────────────────────
+
+  • Proveedores cloud: Azure/AWS (infraestructura)
+  • OpenAI / Azure OpenAI (API de LLM para parsing)
+  • GitHub / Azure DevOps (plataformas de integración)
+  • Consultoras de compliance en el sector financiero (canal de referidos
+    y co-marketing — ellos recomiendan la herramienta cuando asesoran
+    a sus clientes en preparación de auditorías)
+  • Comunidades de datos en LATAM (PyData, dbt LATAM)
+
+
+───────────────────────────────────────────────────
+7. FUENTES DE INGRESO
+───────────────────────────────────────────────────
+
+  Modelo: SaaS B2B, suscripción mensual/anual.
+
+  • Plan Starter (USD 500/mes): hasta 3 repositorios, 1 usuario admin,
+    lineage básico, integración CI/CD en GitHub.
+  • Plan Team (USD 1,200/mes): repositorios ilimitados, hasta 10 usuarios,
+    lineage multi-repo, dashboard completo, reportes de compliance.
+  • Plan Enterprise (USD 2,500+/mes): todo lo anterior + soporte
+    prioritario, SSO/SAML, deployment on-premises o VPC privada,
+    SLA de uptime garantizado.
+
+  Expansión de revenue por cuenta:
+    — Más repositorios → upgrade de plan
+    — Más usuarios (compliance, auditores, management) → más seats
+    — Necesidad de on-prem o features enterprise → plan Enterprise
+
+
+───────────────────────────────────────────────────
+8. ESTRUCTURA DE COSTOS
+───────────────────────────────────────────────────
+
+  Costos fijos:
+  • Infraestructura cloud (hosting, Neo4j, compute): ~USD 500–1,500/mes
+  • API de LLM (OpenAI): ~USD 200–800/mes (varía con volumen de parsing)
+  • Herramientas SaaS (GitHub, monitoring, email): ~USD 100–300/mes
+
+  Costos variables:
+  • LLM API calls escalan con la cantidad de repositorios/PRs analizados
+  • Soporte al cliente escala con la base de clientes
+
+  Costos de equipo (principal costo):
+  • Equipo fundador inicial (2 personas), sin salario al principio
+  • Primer hire: ingeniero full-stack cuando se alcancen ~10 clientes
+
+  Punto de equilibrio estimado: ~15–20 clientes en Plan Team
+  (~USD 18k–24k MRR vs. ~USD 3k–5k de costos fijos)
+
+
+───────────────────────────────────────────────────
+9. VENTAJA COMPETITIVA / DIFERENCIAL
+───────────────────────────────────────────────────
+
+  Lo que nos diferencia de Collibra/Atlan (enterprise):
+  • 100x más barato
+  • Implementación en horas, no meses
+  • Code-first (automático) vs. manual data catalog
+
+  Lo que nos diferencia de OpenLineage/Marquez (open source):
+  • Analiza código fuente, no solo runtime
+  • Soporta SQL estático, dinámico, Python, ADF
+  • Dashboard listo para usar (no requiere armar infraestructura propia)
+
+  Lo que nos diferencia de dbt (para quienes lo usan):
+  • Lineage cross-repo y cross-herramienta (no solo dentro de dbt)
+  • Análisis de impacto en PRs (prevención, no solo documentación)
+  • Soporta Python y ADF, no solo SQL
+
+  Moat (barrera de entrada):
+  • Precisión del parser mejora con cada cliente (más patrones vistos)
+  • Integraciones profundas con Git (análisis de diffs, historia)
+  • Network effect leve: más uso → más patrones → mejor parser
+
+
+───────────────────────────────────────────────────
+RUTA DE EXPANSIÓN (post-validación del beachhead)
+───────────────────────────────────────────────────
+
+  Fase 1 (Año 1-2): Fintechs/bancos medianos en LATAM en auditoría.
+    Objetivo: 15-20 clientes, validar product-market fit.
+
+  Fase 2 (Año 2-3): Expandir caso de uso a operativo (no solo compliance).
+    Mismos clientes usan la plataforma diariamente para análisis de
+    impacto en cada PR. Más seats, más revenue por cuenta.
+
+  Fase 3 (Año 3+): Expansión geográfica a Norteamérica y Europa.
+    Misma regulación (BCBS 239 es global), presupuestos 3-5x mayores.
+
+  Fase 4: Mover upmarket a empresas más grandes frustradas con la
+    naturaleza manual de Collibra/Atlan.
+
+
+───────────────────────────────────────────────────
+RESPUESTA DEL PROFESOR:
+───────────────────────────────────────────────────
+
+Hola Shanon 
+
+La propuesta me gusta y la veo con potencial para desarrollarse dentro del Canvas. 
+
+Sin embargo, el segmento de clientes definido resulta demasiado amplio, por lo que te recomiendo concentrarse inicialmente en un foco más específico. En este sentido, te sugiero priorizar como segmento inicial a equipos de datos y compliance en fintechs o bancos medianos que estén atravesando procesos de auditoría o adecuación regulatoria, ya que allí el problema es más crítico y urgente. Dev todas formas como.no soy experto en esa área, elegí vos el.seg más apropiado. 
+
+Una vez validada la solución en este segmento concreto, podrá evaluarse su ampliación hacia otros perfiles o industrias.
+
+Recordar siempre comenzar con un o dos segmento , probar en ellos para luego expandir 

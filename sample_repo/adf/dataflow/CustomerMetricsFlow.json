@@ -1,0 +1,41 @@
+{
+  "name": "CustomerMetricsFlow",
+  "properties": {
+    "type": "MappingDataFlow",
+    "typeProperties": {
+      "sources": [
+        {
+          "name": "RawCustomers",
+          "dataset": {
+            "referenceName": "SqlRawCustomers",
+            "type": "DatasetReference"
+          }
+        },
+        {
+          "name": "StagingTransactions",
+          "dataset": {
+            "referenceName": "SqlStagingTransactions",
+            "type": "DatasetReference"
+          }
+        }
+      ],
+      "sinks": [
+        {
+          "name": "CustomerMetrics",
+          "dataset": {
+            "referenceName": "SqlCustomerMetrics",
+            "type": "DatasetReference"
+          }
+        }
+      ],
+      "transformations": [
+        {
+          "name": "JoinCustomerTransactions"
+        },
+        {
+          "name": "AggregateMetrics"
+        }
+      ]
+    }
+  }
+}

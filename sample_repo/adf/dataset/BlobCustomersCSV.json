@@ -1,0 +1,19 @@
+{
+  "name": "BlobCustomersCSV",
+  "properties": {
+    "type": "DelimitedText",
+    "linkedServiceName": {
+      "referenceName": "AzureBlobStorage",
+      "type": "LinkedServiceReference"
+    },
+    "typeProperties": {
+      "location": {
+        "type": "AzureBlobStorageLocation",
+        "container": "raw-data",
+        "fileName": "customers.csv"
+      },
+      "columnDelimiter": ",",
+      "firstRowAsHeader": true
+    }
+  }
+}

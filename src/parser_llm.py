@@ -36,6 +36,7 @@ Analyze:
 1. Which tables/dataframes are READ (sources).
 2. Which tables/dataframes are WRITTEN or produced (targets).
 3. For each output column, which input column(s) does it derive from and what transformation is applied.
+4. How data flows between tables, dataframes, and functions (reads and writes).
 
 Return this EXACT JSON structure (no markdown, no explanation):
 {
@@ -50,6 +51,13 @@ Return this EXACT JSON structure (no markdown, no explanation):
       "source_column": "input_col",
       "transformation": "description of the transformation"
     }
+  ],
+  "data_flows": [
+    {
+      "source": "source_table_or_dataframe",
+      "target": "target_table_or_dataframe",
+      "operation": "description (e.g., pd.read_sql, merge, groupby, INSERT INTO)"
+    }
   ]
 }
 
@@ -57,7 +65,13 @@ Rules:
 - Use lowercase for all names.
 - If a column is computed (e.g. SUM, CASE, concat), list ALL source columns.
 - For Python/Pandas, treat DataFrames as tables. Use variable names as table names.
+  Identify which database tables each DataFrame reads from or writes to.
+  If a function reads a table into a DataFrame, add a data_flow from the database table to the DataFrame.
+  If a DataFrame writes to a table (e.g. to_sql), add a data_flow from the DataFrame to the table.
+  If a function takes DataFrames as input and produces a new one, add data_flows from input DataFrames to the output.
+- For PYTHON_FUNCTION entries, add data_flows connecting them to the DataFrames/tables they read and produce.
 - For dynamic SQL, infer the likely tables/columns from the string template.
+- Include data_flows for EVERY read/write/transform relationship between entities.
 - Return empty arrays if no lineage can be determined.
 """
 
@@ -167,7 +181,34 @@ def interpret_with_llm(file_path: str | Path, code: str) -> LineageGraph:
             target_id=source_col_id,
             edge_type=EdgeType.DERIVES_FROM,
             transformation=transformation,
-            confidence=0.85,       # LLM-inferred
+            confidence=0.85,
+            metadata={"source": "llm"},
+        ))
+
+    existing_node_ids = {n.id for n in graph.nodes}
+    for flow in data.get("data_flows", []):
+        source = flow.get("source", "").lower()
+        target = flow.get("target", "").lower()
+        operation = flow.get("operation", "")
+        if not source or not target:
+            continue
+
+        for name in (source, target):
+            if name not in existing_node_ids:
+                graph.nodes.append(LineageNode(
+                    id=name,
+                    name=name,
+                    node_type=NodeType.TABLE,
+                    metadata={"file": str(file_path), "source": "llm"},
+                ))
+                existing_node_ids.add(name)
+
+        graph.edges.append(LineageEdge(
+            source_id=target,
+            target_id=source,
+            edge_type=EdgeType.READS_FROM,
+            transformation=operation,
+            confidence=0.85,
             metadata={"source": "llm"},
         ))
 

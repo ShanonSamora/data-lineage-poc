@@ -37,11 +37,11 @@ def _safe_qualify(expression: exp.Expression) -> exp.Expression:
         return expression
 
 
-def _extract_source_columns(select_expr: exp.Select) -> list[tuple[str, str, str]]:
+def _extract_source_columns(select_expr: exp.Select) -> list[tuple[str, str, str, str]]:
     """
-    Walk a SELECT and return (target_alias, source_table, source_column) tuples.
+    Walk a SELECT and return (target_alias, source_table, source_column, transformation) tuples.
     """
-    results: list[tuple[str, str, str]] = []
+    results: list[tuple[str, str, str, str]] = []
 
     for projection in select_expr.expressions:
         alias = ""
@@ -53,11 +53,19 @@ def _extract_source_columns(select_expr: exp.Select) -> list[tuple[str, str, str
             if isinstance(inner, exp.Column):
                 alias = inner.name
 
-        # Collect all Column references inside this projection
+        is_direct = isinstance(inner, exp.Column)
+        transformation = ""
+        if not is_direct:
+            try:
+                raw_sql = inner.sql(dialect="postgres")
+                transformation = raw_sql.replace('"', '')
+            except Exception:
+                transformation = ""
+
         for col in inner.find_all(exp.Column):
             table = col.table or ""
             column_name = col.name
-            results.append((alias or column_name, table, column_name))
+            results.append((alias or column_name, table, column_name, transformation))
 
     return results
 
@@ -193,31 +201,33 @@ def _handle_select(
     target_table: str | None,
 ) -> None:
     """Extract column-level lineage from a SELECT statement."""
-    # Try to qualify columns to resolve ambiguous references
     qualified = _safe_qualify(select)
 
-    # Collect FROM/JOIN source tables
+    # Build alias → real table name mapping so we resolve e.g. "c" → "stg_customers"
+    alias_map: dict[str, str] = {}
     source_tables: set[str] = set()
     for table in qualified.find_all(exp.Table):
         tname = table.name.lower()
-        if tname:
-            source_tables.add(tname)
-            if target_table:
-                graph.edges.append(LineageEdge(
-                    source_id=target_table,
-                    target_id=tname,
-                    edge_type=EdgeType.READS_FROM,
-                ))
+        if not tname:
+            continue
+        source_tables.add(tname)
+        alias_map[tname] = tname
+        if table.alias:
+            alias_map[table.alias.lower()] = tname
+        if target_table:
+            graph.edges.append(LineageEdge(
+                source_id=target_table,
+                target_id=tname,
+                edge_type=EdgeType.READS_FROM,
+            ))
 
-    # Extract column mappings
     mappings = _extract_source_columns(qualified)
-    for target_col_name, src_table, src_col in mappings:
+    for target_col_name, src_table, src_col, transformation in mappings:
         src_table = src_table.lower()
         src_col = src_col.lower()
         target_col_name = target_col_name.lower()
 
-        # Resolve table alias → real table name if possible
-        resolved_table = src_table if src_table in source_tables else ""
+        resolved_table = alias_map.get(src_table, "")
 
         if target_table:
             target_col_id = f"{target_table}.{target_col_name}"
@@ -245,6 +255,7 @@ def _handle_select(
                     source_id=target_col_id,
                     target_id=src_col_id,
                     edge_type=EdgeType.DERIVES_FROM,
+                    transformation=transformation,
                     confidence=1.0,
                 ))
 

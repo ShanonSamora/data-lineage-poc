@@ -1,5 +1,5 @@
 {
-  "name": "SqlStagingTransactions",
+  "name": "SqlStgTransactions",
   "properties": {
     "type": "AzureSqlTable",
     "linkedServiceName": {
@@ -7,8 +7,7 @@
       "type": "LinkedServiceReference"
     },
     "typeProperties": {
-      "schema": "staging",
-      "table": "transactions"
+      "table": "stg_transactions"
     }
   }
 }

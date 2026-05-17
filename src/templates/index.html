@@ -4,133 +4,367 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Data Lineage Explorer</title>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/vis-network/9.1.6/vis-network.min.js"></script>
-    <link href="https://cdnjs.cloudflare.com/ajax/libs/vis-network/9.1.6/vis-network.min.css" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/vis-network@9.1.6/standalone/umd/vis-network.min.js"></script>
+    <link href="https://cdn.jsdelivr.net/npm/vis-network@9.1.6/dist/vis-network.min.css" rel="stylesheet">
     <style>
         * { box-sizing: border-box; margin: 0; padding: 0; }
         body { font-family: 'Segoe UI', system-ui, -apple-system, sans-serif; background: #0f172a; color: #e2e8f0; }
 
+        /* ── Header ── */
         .header {
             background: #1e293b; border-bottom: 1px solid #334155;
-            padding: 16px 24px; display: flex; align-items: center; gap: 16px;
+            padding: 14px 24px; display: flex; align-items: center; gap: 16px;
         }
-        .header h1 { font-size: 20px; font-weight: 600; color: #f8fafc; }
-        .header .subtitle { font-size: 13px; color: #94a3b8; margin-left: 4px; }
+        .header h1 { font-size: 18px; font-weight: 700; color: #f8fafc; letter-spacing: -0.01em; }
+        .header .subtitle { font-size: 12px; color: #64748b; }
+        .legend { display: flex; gap: 14px; margin-left: auto; font-size: 11px; flex-wrap: wrap; }
+        .legend-item { display: flex; align-items: center; gap: 4px; color: #94a3b8; }
+        .legend-dot { width: 8px; height: 8px; border-radius: 50%; }
+        .legend-line { width: 16px; height: 0; border-top: 2px dashed #f59e0b; }
+        .llm-badge {
+            display: flex; align-items: center; gap: 6px; padding: 4px 10px;
+            border-radius: 20px; font-size: 11px; font-weight: 600;
+            border: 1px solid currentColor;
+        }
+        .llm-badge.active { color: #34d399; border-color: #065f46; background: #022c22; }
+        .llm-badge.inactive { color: #94a3b8; border-color: #334155; background: #1e293b; }
+        .llm-badge .dot { width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
 
+        /* ── Toolbar ── */
         .toolbar {
             background: #1e293b; border-bottom: 1px solid #334155;
-            padding: 12px 24px; display: flex; gap: 12px; align-items: center; flex-wrap: wrap;
+            padding: 10px 24px; display: flex; gap: 8px; align-items: center; flex-wrap: wrap;
         }
         .btn {
-            padding: 8px 16px; border: 1px solid #475569; border-radius: 6px;
-            background: #334155; color: #e2e8f0; cursor: pointer; font-size: 13px;
-            transition: all 0.15s;
+            padding: 7px 14px; border: 1px solid #334155; border-radius: 6px;
+            background: #0f172a; color: #cbd5e1; cursor: pointer; font-size: 12px;
+            transition: background 0.12s, border-color 0.12s; white-space: nowrap;
         }
-        .btn:hover { background: #475569; }
-        .btn-primary { background: #2563eb; border-color: #3b82f6; }
+        .btn:hover { background: #1e293b; border-color: #475569; }
+        .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+        .btn-primary { background: #1e40af; border-color: #2563eb; color: #e0f2fe; }
         .btn-primary:hover { background: #1d4ed8; }
-        .btn-success { background: #059669; border-color: #10b981; }
+        .btn-success { background: #065f46; border-color: #059669; color: #d1fae5; }
         .btn-success:hover { background: #047857; }
-
+        .btn-active { background: #1e3a5f; border-color: #3b82f6; color: #93c5fd; }
+        .btn-mini { padding: 3px 8px; font-size: 10px; border-radius: 4px; }
         .search-box {
-            padding: 8px 12px; border: 1px solid #475569; border-radius: 6px;
-            background: #0f172a; color: #e2e8f0; font-size: 13px; width: 300px;
+            padding: 7px 12px; border: 1px solid #334155; border-radius: 6px;
+            background: #0f172a; color: #e2e8f0; font-size: 12px; width: 260px;
         }
-        .search-box::placeholder { color: #64748b; }
+        .search-box::placeholder { color: #475569; }
+        .toolbar-sep { width: 1px; height: 24px; background: #334155; margin: 0 4px; }
 
-        .main { display: flex; height: calc(100vh - 120px); }
-        #graph-container { flex: 1; background: #0f172a; }
+        /* ── Layout ── */
+        .main { display: flex; height: calc(100vh - 109px); }
+        .viewer { flex: 1; background: #0f172a; min-width: 0; position: relative; }
+        .view-panel { width: 100%; height: 100%; position: relative; }
+        .view-hidden { display: none !important; }
 
+        /* ── Catalog ── */
+        .catalog-panel {
+            width: 300px; background: #0b1220; border-right: 1px solid #1e293b;
+            overflow-y: auto; padding: 14px; flex-shrink: 0; display: block;
+        }
+        body.catalog-hidden .catalog-panel { display: none; }
+        .catalog-header {
+            display: flex; align-items: center; justify-content: space-between;
+            margin-bottom: 8px;
+        }
+        .catalog-header h2 { font-size: 11px; color: #64748b; text-transform: uppercase; letter-spacing: 0.08em; font-weight: 600; }
+        .catalog-meta { font-size: 11px; color: #475569; margin-bottom: 10px; }
+        .type-filter { display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 10px; padding-bottom: 10px; border-bottom: 1px solid #1e293b; }
+        .type-chip {
+            padding: 3px 8px; border-radius: 12px; font-size: 10px; font-weight: 600;
+            cursor: pointer; user-select: none; border: 1px solid transparent;
+            background: #111827; color: #64748b; transition: all 0.12s;
+        }
+        .type-chip:hover { color: #cbd5e1; border-color: #334155; }
+        .type-chip.active { background: #1e3a5f; color: #93c5fd; border-color: #2563eb; }
+        .type-chip.all { background: #064e3b; color: #6ee7b7; border-color: #059669; }
+        .type-chip.all.active { background: #065f46; color: #d1fae5; }
+        .type-chip .count {
+            font-weight: 500; color: inherit; opacity: 0.7; margin-left: 4px;
+        }
+        .catalog-body { display: flex; flex-direction: column; gap: 8px; }
+        .catalog-empty { color: #475569; font-size: 12px; padding: 8px; }
+        .table-card {
+            background: #111827; border: 1px solid #1f2937; border-radius: 8px;
+            overflow: hidden; transition: border-color 0.12s;
+        }
+        .table-card:hover { border-color: #334155; }
+        .table-title {
+            display: flex; align-items: center; justify-content: space-between; gap: 8px;
+            cursor: pointer; padding: 8px 10px; background: #0b1220;
+        }
+        .table-title .name { font-size: 12px; color: #e2e8f0; font-weight: 600; }
+        .table-title .type { font-size: 10px; color: #64748b; text-transform: uppercase; }
+        .column-list { display: flex; flex-wrap: wrap; gap: 4px; padding: 6px 8px; }
+        .column-item {
+            padding: 3px 7px; border-radius: 5px; background: #0f172a; border: 1px solid #1f2937;
+            font-size: 10px; color: #94a3b8; cursor: pointer; transition: all 0.1s;
+        }
+        .column-item:hover { border-color: #38bdf8; color: #bae6fd; }
+
+        /* ── Sidebar ── */
         .sidebar {
-            width: 360px; background: #1e293b; border-left: 1px solid #334155;
-            overflow-y: auto; padding: 16px;
+            width: 320px; background: #111827; border-left: 1px solid #1e293b;
+            overflow-y: auto; padding: 16px; flex-shrink: 0;
         }
-        .sidebar h2 { font-size: 15px; color: #94a3b8; margin-bottom: 12px; text-transform: uppercase; letter-spacing: 0.05em; }
-
-        .node-detail { background: #0f172a; border-radius: 8px; padding: 14px; margin-bottom: 12px; }
-        .node-detail .label { font-size: 11px; color: #64748b; text-transform: uppercase; margin-bottom: 2px; }
-        .node-detail .value { font-size: 14px; color: #f1f5f9; word-break: break-all; }
-
+        .sidebar h2 { font-size: 11px; color: #64748b; margin-bottom: 10px; text-transform: uppercase; letter-spacing: 0.08em; font-weight: 600; }
+        .node-detail { background: #0f172a; border-radius: 6px; padding: 12px; margin-bottom: 8px; border: 1px solid #1e293b; }
+        .node-detail .lbl { font-size: 10px; color: #475569; text-transform: uppercase; margin-bottom: 3px; }
+        .node-detail .val { font-size: 13px; color: #f1f5f9; word-break: break-all; }
         .badge {
-            display: inline-block; padding: 2px 8px; border-radius: 4px;
-            font-size: 11px; font-weight: 600; text-transform: uppercase;
+            display: inline-block; padding: 2px 7px; border-radius: 4px;
+            font-size: 10px; font-weight: 600; text-transform: uppercase;
         }
-        .badge-table { background: #1e3a5f; color: #60a5fa; }
-        .badge-view { background: #1a3636; color: #34d399; }
-        .badge-column { background: #3b1f4b; color: #c084fc; }
-        .badge-procedure { background: #422006; color: #fb923c; }
-        .badge-file { background: #1c1917; color: #a8a29e; }
-        .badge-python { background: #1a2332; color: #fbbf24; }
-
-        .confidence-bar {
-            height: 4px; border-radius: 2px; background: #334155; margin-top: 4px;
-        }
+        .badge-table    { background: #1e3a5f; color: #60a5fa; }
+        .badge-view     { background: #14362e; color: #34d399; }
+        .badge-column   { background: #2d1b4e; color: #c084fc; }
+        .badge-procedure { background: #3a1f06; color: #fb923c; }
+        .badge-file     { background: #1c1917; color: #a8a29e; }
+        .badge-python-function { background: #1f1a08; color: #fbbf24; }
+        .confidence-bar { height: 3px; border-radius: 2px; background: #1e293b; margin-top: 4px; }
         .confidence-fill { height: 100%; border-radius: 2px; }
-        .confidence-high { background: #22c55e; }
-        .confidence-medium { background: #f59e0b; }
+        .conf-high { background: #22c55e; }
+        .conf-med  { background: #f59e0b; }
+        .stats { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-bottom: 14px; }
+        .stat-card { background: #0f172a; border-radius: 6px; padding: 10px; text-align: center; border: 1px solid #1e293b; }
+        .stat-card .num { font-size: 22px; font-weight: 700; color: #f8fafc; }
+        .stat-card .lbl { font-size: 10px; color: #475569; margin-top: 2px; }
 
-        .stats {
-            display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 16px;
+        /* ── Graph panel ── */
+        #graph-panel { height: 100%; }
+        .empty-state {
+            display: flex; flex-direction: column; align-items: center;
+            justify-content: center; height: 100%; color: #475569; font-size: 14px;
+            gap: 8px; text-align: center; padding: 32px;
         }
-        .stat-card {
-            background: #0f172a; border-radius: 8px; padding: 12px; text-align: center;
-        }
-        .stat-card .num { font-size: 24px; font-weight: 700; color: #f8fafc; }
-        .stat-card .lbl { font-size: 11px; color: #64748b; margin-top: 2px; }
+        .empty-state .icon { font-size: 40px; margin-bottom: 8px; }
 
+        /* ── Flow View ── */
+        #flow-panel {
+            height: 100%;
+            overflow: auto;
+            background: #080e1a;
+        }
+        .flow-empty {
+            display: flex; flex-direction: column; align-items: center;
+            justify-content: center; height: 100%; color: #334155; font-size: 14px;
+            gap: 10px; text-align: center; padding: 32px;
+        }
+        .flow-empty .icon { font-size: 44px; margin-bottom: 4px; }
+        .flow-empty .hint { font-size: 12px; color: #1e293b; }
+        #flow-content {
+            position: relative;
+            padding: 40px 48px 80px;
+            min-width: fit-content;
+        }
+        .flow-nav {
+            display: flex; align-items: center; justify-content: space-between;
+            margin-bottom: 28px;
+        }
+        .flow-breadcrumb { font-size: 12px; color: #475569; display: flex; align-items: center; gap: 6px; }
+        .flow-breadcrumb .crumb { color: #64748b; cursor: pointer; }
+        .flow-breadcrumb .crumb:hover { color: #94a3b8; }
+        .flow-breadcrumb .sep { color: #1e293b; }
+        .flow-col-counts { font-size: 11px; color: #334155; }
+        .flow-layout { display: flex; align-items: flex-start; gap: 0; }
+        .flow-col {
+            display: flex; flex-direction: column; gap: 14px;
+            min-width: 240px; max-width: 260px; flex-shrink: 0;
+        }
+        .flow-center-col { min-width: 268px; max-width: 288px; }
+        .flow-gap { width: 72px; flex-shrink: 0; }
+        .flow-col-header {
+            font-size: 10px; font-weight: 700; color: #334155; text-transform: uppercase;
+            letter-spacing: 0.1em; padding: 0 2px; margin-bottom: 2px; display: flex;
+            align-items: center; gap: 6px;
+        }
+        .flow-col-header .count-badge {
+            background: #1e293b; color: #475569; border-radius: 10px;
+            padding: 1px 6px; font-size: 10px; font-weight: 600;
+        }
+        .flow-card {
+            background: #0e1628; border: 1px solid #1a2540; border-radius: 10px;
+            overflow: hidden; transition: border-color 0.15s, box-shadow 0.15s;
+        }
+        .flow-card:not(.flow-card-center):hover { border-color: #2d4a80; }
+        .flow-card-center {
+            background: #0f1b2e; border: 1px solid #1d3461;
+            box-shadow: 0 0 0 1px #1d4ed8, 0 4px 24px rgba(29,78,216,0.15);
+        }
+        .flow-card-header {
+            padding: 10px 14px 9px; display: flex; align-items: center;
+            justify-content: space-between; background: #080f1e;
+            border-bottom: 1px solid #111d33;
+        }
+        .flow-card-center .flow-card-header { background: #0a1526; border-bottom-color: #1a2f54; }
+        .flow-card-header.clickable { cursor: pointer; transition: background 0.12s; }
+        .flow-card-header.clickable:hover { background: #0f1a30; }
+        .flow-card-title {
+            font-size: 13px; font-weight: 700; color: #e2e8f0;
+            white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 160px;
+        }
+        .flow-card-center .flow-card-title { color: #f1f5f9; }
+        .flow-card-type {
+            font-size: 9px; font-weight: 700; text-transform: uppercase;
+            letter-spacing: 0.08em; padding: 2px 7px; border-radius: 4px; flex-shrink: 0;
+        }
+        .type-table    { background: #1e3a5f; color: #60a5fa; }
+        .type-view     { background: #14362e; color: #34d399; }
+        .type-procedure { background: #3a1f06; color: #fb923c; }
+        .type-python_function { background: #1f1a08; color: #fbbf24; }
+        .type-adf_pipeline, .type-adf_dataset, .type-adf_dataflow { background: #1e1b4b; color: #a5b4fc; }
+        .flow-card-columns { padding: 5px 0 4px; }
+        .flow-col-item {
+            padding: 5px 14px; display: flex; align-items: center; gap: 8px;
+            font-size: 11px; color: #475569; cursor: pointer;
+            transition: background 0.08s, color 0.08s;
+            white-space: nowrap; overflow: hidden;
+        }
+        .flow-col-item:hover { background: #111d33; color: #cbd5e1; }
+        .flow-col-item.fc-connected { color: #a78bfa; }
+        .flow-col-item.fc-highlighted { background: #1e1b4b !important; color: #c4b5fd !important; }
+        .flow-col-dot {
+            width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0;
+            background: #1e293b; transition: background 0.12s;
+        }
+        .fc-connected .flow-col-dot { background: #a78bfa; }
+        .fc-highlighted .flow-col-dot { background: #c4b5fd; }
+        .flow-col-name { flex: 1; overflow: hidden; text-overflow: ellipsis; }
+        .flow-col-more {
+            padding: 4px 14px; font-size: 10px; color: #1e293b;
+            cursor: default; font-style: italic;
+        }
+        .flow-card-nav {
+            border-top: 1px solid #111d33; padding: 6px 14px;
+            font-size: 10px; color: #1e3a5f; display: flex; align-items: center;
+            gap: 4px; cursor: pointer; transition: color 0.12s, background 0.12s;
+        }
+        .flow-card-nav:hover { color: #3b82f6; background: #0a1526; }
+        #flow-svg { position: absolute; top: 0; left: 0; pointer-events: none; overflow: visible; }
+
+        /* ── Toast ── */
         .toast {
-            position: fixed; bottom: 24px; right: 24px; padding: 12px 20px;
+            position: fixed; bottom: 20px; right: 20px; padding: 10px 18px;
             background: #1e293b; border: 1px solid #334155; border-radius: 8px;
-            font-size: 13px; color: #e2e8f0; opacity: 0; transition: opacity 0.3s;
-            z-index: 100;
+            font-size: 12px; color: #e2e8f0; opacity: 0; transition: opacity 0.25s;
+            z-index: 1000; max-width: 340px;
         }
         .toast.show { opacity: 1; }
 
-        .legend {
-            display: flex; gap: 12px; margin-left: auto; font-size: 12px;
+        /* ── Responsive ── */
+        @media (max-width: 1100px) {
+            .main { flex-direction: column; }
+            .catalog-panel { width: 100%; border-right: none; border-bottom: 1px solid #1e293b; max-height: 220px; }
+            .sidebar { width: 100%; border-left: none; border-top: 1px solid #1e293b; }
         }
-        .legend-item { display: flex; align-items: center; gap: 4px; }
-        .legend-dot {
-            width: 10px; height: 10px; border-radius: 50%;
-        }
-
-        .empty-state {
-            display: flex; flex-direction: column; align-items: center;
-            justify-content: center; height: 100%; color: #64748b; font-size: 15px;
-        }
-        .empty-state .icon { font-size: 48px; margin-bottom: 16px; }
     </style>
 </head>
 <body>
     <div class="header">
         <h1>Data Lineage Explorer</h1>
-        <span class="subtitle">Static Analysis with AI — Column-Level Lineage</span>
+        <span class="subtitle">Static Analysis + AI · Column-Level Lineage</span>
         <div class="legend">
-            <div class="legend-item"><div class="legend-dot" style="background:#60a5fa"></div> Table</div>
-            <div class="legend-item"><div class="legend-dot" style="background:#34d399"></div> View</div>
-            <div class="legend-item"><div class="legend-dot" style="background:#c084fc"></div> Column</div>
-            <div class="legend-item"><div class="legend-dot" style="background:#fb923c"></div> Procedure</div>
-            <div class="legend-item"><div class="legend-dot" style="background:#fbbf24"></div> Python</div>
-            <div class="legend-item"><div class="legend-dot" style="background:#a8a29e"></div> File</div>
+            <div class="legend-item"><div class="legend-dot" style="background:#60a5fa"></div>Table</div>
+            <div class="legend-item"><div class="legend-dot" style="background:#34d399"></div>View</div>
+            <div class="legend-item"><div class="legend-dot" style="background:#c084fc"></div>Column</div>
+            <div class="legend-item"><div class="legend-dot" style="background:#fb923c"></div>Procedure</div>
+            <div class="legend-item"><div class="legend-dot" style="background:#fbbf24"></div>Python</div>
+            <div class="legend-item"><div class="legend-line"></div>LLM inferred</div>
+        </div>
+        <div id="llm-badge" class="llm-badge inactive" title="LLM status">
+            <span class="dot"></span><span id="llm-badge-text">LLM</span>
         </div>
     </div>
 
-    <div class="toolbar">
-        <button class="btn btn-primary" onclick="analyzeRepo(false)">Analyze (Neo4j)</button>
-        <button class="btn btn-success" onclick="analyzeRepo(true)">Analyze (Local)</button>
-        <input class="search-box" id="search" type="text" placeholder="Search tables, columns... (Enter)" onkeydown="if(event.key==='Enter')searchNodes()">
-        <button class="btn" onclick="searchNodes()">Search</button>
-        <button class="btn" onclick="resetView()">Reset View</button>
-    </div>
-
-    <div class="main">
-        <div id="graph-container">
-            <div class="empty-state" id="empty-state">
-                <div class="icon">⬡</div>
-                <div>Click <strong>Analyze</strong> to scan the repository and build lineage</div>
-                <div style="margin-top:8px;font-size:13px">Use <strong>Local</strong> mode if Neo4j is not running</div>
+    <div class="toolbar" role="toolbar" aria-label="Lineage controls">
+        <button class="btn btn-success" id="btn-analyze" onclick="analyzeRepo()" aria-label="Analyze repository and build lineage graph">Analyze</button>
+        <div class="toolbar-sep" aria-hidden="true"></div>
+        <label for="search" class="sr-only" style="position:absolute;left:-9999px">Search tables and columns</label>
+        <input class="search-box" id="search" type="text"
+               placeholder="Search tables, columns… (filter as you type)"
+               aria-label="Search tables and columns"
+               oninput="filterCatalog(this.value)"
+               onkeydown="if(event.key==='Enter')searchNodes()">
+        <button class="btn" onclick="searchNodes()" aria-label="Run search">Search</button>
+        <div class="toolbar-sep" aria-hidden="true"></div>
+        <button class="btn btn-active" id="view-flow" onclick="setView('flow')" aria-label="Switch to Flow View" aria-pressed="true">Flow View</button>
+        <button class="btn" id="view-graph" onclick="setView('graph')" aria-label="Switch to Graph View" aria-pressed="false">Graph</button>
+        <div class="toolbar-sep" aria-hidden="true"></div>
+        <button class="btn" id="toggle-catalog" onclick="toggleCatalog()" aria-label="Hide or show the table catalog">Hide Catalog</button>
+        <button class="btn" id="toggle-llm" onclick="toggleLlmOnly()" aria-label="Filter to LLM-inferred edges only">LLM Only: Off</button>
+        <button class="btn" id="btn-download" onclick="downloadGraphJson()" aria-label="Download the full lineage graph as JSON" title="Download the full lineage graph as JSON">Download JSON</button>
+        <button class="btn" onclick="resetView()" aria-label="Reset view to full graph">Reset</button>
+        <div style="margin-left:auto">
+            <div class="catalog-header" style="margin:0">
+                <button class="btn btn-mini btn-active" id="lineage-upstream" onclick="setLineageMode('upstream')">Upstream</button>
+                <button class="btn btn-mini" id="lineage-downstream" onclick="setLineageMode('downstream')">Downstream</button>
             </div>
         </div>
+    </div>
+
+    <div class="main" id="main-layout">
+        <!-- Catalog -->
+        <div class="catalog-panel" id="catalog-panel">
+            <div class="catalog-header">
+                <h2>Tables &amp; Views</h2>
+            </div>
+            <div class="catalog-meta" id="catalog-meta">Run Analyze to build catalog.</div>
+            <div class="type-filter" id="type-filter" role="group" aria-label="Filter catalog by node type"></div>
+            <div class="catalog-body" id="catalog-body">
+                <div class="catalog-empty">No tables loaded.</div>
+            </div>
+        </div>
+
+        <!-- Viewer -->
+        <div class="viewer" id="viewer">
+
+            <!-- Flow panel (default) -->
+            <div id="flow-panel" class="view-panel">
+                <div class="flow-empty" id="flow-empty">
+                    <div class="icon">⬡</div>
+                    <div>Select a table from the catalog to trace its lineage</div>
+                    <div class="hint">Or click <strong>Analyze</strong> to load the sample data warehouse</div>
+                </div>
+                <div id="flow-content" style="display:none;">
+                    <div class="flow-nav">
+                        <div class="flow-breadcrumb" id="flow-breadcrumb"></div>
+                        <div class="flow-col-counts" id="flow-counts"></div>
+                    </div>
+                    <div class="flow-layout" id="flow-layout">
+                        <div class="flow-col" id="flow-upstream-col">
+                            <div class="flow-col-header">
+                                ← Upstream <span class="count-badge" id="up-count">0</span>
+                            </div>
+                        </div>
+                        <div class="flow-gap"></div>
+                        <div class="flow-col flow-center-col" id="flow-center-col">
+                            <div class="flow-col-header">Selected</div>
+                        </div>
+                        <div class="flow-gap"></div>
+                        <div class="flow-col" id="flow-downstream-col">
+                            <div class="flow-col-header">
+                                Downstream → <span class="count-badge" id="down-count">0</span>
+                            </div>
+                        </div>
+                    </div>
+                    <svg id="flow-svg"></svg>
+                </div>
+            </div>
+
+            <!-- Graph panel -->
+            <div id="graph-panel" class="view-panel view-hidden">
+                <div class="empty-state" id="graph-empty">
+                    <div class="icon">⬡</div>
+                    <div>Click <strong>Analyze</strong> to scan the repository and build lineage</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Sidebar -->
         <div class="sidebar" id="sidebar">
             <h2>Overview</h2>
             <div class="stats" id="stats">
@@ -138,9 +372,11 @@
                 <div class="stat-card"><div class="num" id="stat-edges">—</div><div class="lbl">Edges</div></div>
                 <div class="stat-card"><div class="num" id="stat-tables">—</div><div class="lbl">Tables</div></div>
                 <div class="stat-card"><div class="num" id="stat-columns">—</div><div class="lbl">Columns</div></div>
+                <div class="stat-card"><div class="num" id="stat-llm-edges">—</div><div class="lbl">LLM Edges</div></div>
+                <div class="stat-card"><div class="num" id="stat-conf">—</div><div class="lbl">Avg Conf.</div></div>
             </div>
             <div id="detail-panel">
-                <p style="color:#64748b;font-size:13px">Click a node to see details, upstream/downstream lineage.</p>
+                <p style="color:#334155;font-size:12px">Click a node to see details and trace lineage.</p>
             </div>
         </div>
     </div>
@@ -148,106 +384,388 @@
     <div class="toast" id="toast"></div>
 
     <script>
+    // ── State ──────────────────────────────────────────────────────────
     let network = null;
+    let visLoadPromise = null;
     let allData = { nodes: [], edges: [] };
-    let useLocal = false;
+    let viewData = { nodes: [], edges: [] };
+    let lineageMode = 'upstream';
+    let llmOnly = false;
+    let catalogVisible = true;
+    let currentView = 'flow';
+    let lastSelectedNodeId = null;
+    let flowHistory = [];
+    let activeTypeFilter = null;  // null = show all; otherwise a NodeType string
 
-    const NODE_COLORS = {
-        TABLE:           { background: '#1e3a5f', border: '#60a5fa', highlight: { background: '#2563eb', border: '#93c5fd' } },
-        VIEW:            { background: '#1a3636', border: '#34d399', highlight: { background: '#059669', border: '#6ee7b7' } },
-        COLUMN:          { background: '#3b1f4b', border: '#c084fc', highlight: { background: '#7c3aed', border: '#d8b4fe' } },
-        PROCEDURE:       { background: '#422006', border: '#fb923c', highlight: { background: '#c2410c', border: '#fdba74' } },
-        PYTHON_FUNCTION: { background: '#1a2332', border: '#fbbf24', highlight: { background: '#b45309', border: '#fde68a' } },
-        FILE:            { background: '#1c1917', border: '#a8a29e', highlight: { background: '#44403c', border: '#d6d3d1' } },
-    };
-    const NODE_SHAPES = {
-        TABLE: 'box', VIEW: 'box', COLUMN: 'dot',
-        PROCEDURE: 'diamond', PYTHON_FUNCTION: 'diamond', FILE: 'triangle',
-    };
-
-    const EDGE_COLORS = {
-        DERIVES_FROM: '#c084fc',
-        READS_FROM:   '#60a5fa',
-        WRITES_TO:    '#f87171',
-        HAS_COLUMN:   '#475569',
-        DEFINED_IN:   '#334155',
-    };
-
-    function toast(msg) {
+    // ── Utilities ─────────────────────────────────────────────────────
+    function toast(msg, dur = 3000) {
         const t = document.getElementById('toast');
         t.textContent = msg;
         t.classList.add('show');
-        setTimeout(() => t.classList.remove('show'), 3000);
+        setTimeout(() => t.classList.remove('show'), dur);
     }
 
-    async function analyzeRepo(local) {
-        useLocal = local;
-        const endpoint = local ? '/analyze-local' : '/analyze';
-        toast('Analyzing repository...');
-        try {
-            const res = await fetch(endpoint, { method: 'POST' });
-            const data = await res.json();
-            if (!res.ok) { toast('Error: ' + (data.detail || 'unknown')); return; }
-            toast(`Done: ${data.nodes_extracted} nodes, ${data.edges_extracted} edges`);
-            await loadGraph();
-        } catch (e) {
-            toast('Error: ' + e.message);
+    function escHtml(s) {
+        const d = document.createElement('div');
+        d.textContent = String(s ?? '');
+        return d.innerHTML;
+    }
+    function escAttr(s) {
+        return String(s ?? '').replace(/'/g, "\\'").replace(/"/g, '&quot;');
+    }
+    function safeFlowId(colId) {
+        return 'fid_' + String(colId).replace(/[^a-zA-Z0-9]/g, '_');
+    }
+
+    async function ensureVisLoaded() {
+        const visLib = window.vis || window.visNetwork;
+        if (visLib && visLib.Network && visLib.DataSet) return true;
+        if (visLoadPromise) return visLoadPromise;
+        visLoadPromise = new Promise((resolve) => {
+            const s = document.createElement('script');
+            s.src = 'https://unpkg.com/vis-network@9.1.6/standalone/umd/vis-network.min.js';
+            s.onload = () => {
+                const lib = window.vis || window.visNetwork;
+                resolve(!!(lib && lib.Network && lib.DataSet));
+            };
+            s.onerror = () => resolve(false);
+            document.head.appendChild(s);
+        });
+        return visLoadPromise;
+    }
+
+    // ── Node / edge helpers ────────────────────────────────────────────
+    function edgeSource(e) { return e.source_id || e.source || ''; }
+    function edgeTarget(e) { return e.target_id || e.target || ''; }
+    function edgeConfidence(e) {
+        if (e.confidence != null) return e.confidence;
+        if (e._confidence != null) return e._confidence;
+        return 1.0;
+    }
+    function getMetaValue(meta, key) {
+        if (!meta) return '';
+        if (typeof meta === 'object') return meta[key] || '';
+        const re = new RegExp(key.replace(/[-/\\^$*+?.()|[\]{}]/g, '\\$&') + '\'?\\s*:\\s*\'([^\']+)', 'i');
+        const m = String(meta).match(re);
+        return m ? m[1] : '';
+    }
+    function isLlmEdge(e) {
+        if (edgeConfidence(e) < 1.0) return true;
+        return getMetaValue(e.metadata, 'source').toLowerCase() === 'llm';
+    }
+    function isLlmNode(n) {
+        if (typeof n.metadata === 'string' && n.metadata.toLowerCase().includes("'source': 'llm'")) return true;
+        return getMetaValue(n.metadata, 'source').toLowerCase() === 'llm';
+    }
+    function isTableLike(n) {
+        return n && ['TABLE','VIEW','PROCEDURE','PYTHON_FUNCTION','ADF_PIPELINE','ADF_DATASET','ADF_DATAFLOW'].includes(n.node_type);
+    }
+    function isTableNode(n) {
+        return n && (n.node_type === 'TABLE' || n.node_type === 'VIEW');
+    }
+    function tableFromColumnId(colId) {
+        if (!colId) return '';
+        const idx = String(colId).indexOf('.');
+        return idx > 0 ? colId.slice(0, idx) : '';
+    }
+    function getColumnTableName(node) {
+        const mt = getMetaValue(node.metadata, 'table');
+        if (mt) return mt;
+        if (node.id && node.id.includes('.')) return node.id.split('.')[0];
+        return '';
+    }
+    function getLlmSubgraph(data) {
+        const llmEdges = data.edges.filter(isLlmEdge);
+        const nodeIds = new Set();
+        llmEdges.forEach(e => { nodeIds.add(edgeSource(e)); nodeIds.add(edgeTarget(e)); });
+        return {
+            nodes: data.nodes.filter(n => nodeIds.has(n.id) || isLlmNode(n)),
+            edges: llmEdges,
+        };
+    }
+
+    // ── LLM toggle ─────────────────────────────────────────────────────
+    function updateLlmStats(data) {
+        const llmEdges = data.edges.filter(isLlmEdge);
+        const el = document.getElementById('stat-llm-edges');
+        if (el) el.textContent = llmEdges.length;
+
+        const badge = document.getElementById('llm-badge');
+        const txt = document.getElementById('llm-badge-text');
+        if (badge && txt) {
+            const hasLlm = llmEdges.length > 0;
+            badge.className = 'llm-badge ' + (hasLlm ? 'active' : 'inactive');
+            txt.textContent = hasLlm ? `LLM: ${llmEdges.length} edges` : 'LLM: off';
+        }
+
+        const edges = data.edges.filter(e => edgeConfidence(e) > 0);
+        const avgConf = edges.length
+            ? (edges.reduce((s, e) => s + edgeConfidence(e), 0) / edges.length).toFixed(2)
+            : '—';
+        const confEl = document.getElementById('stat-conf');
+        if (confEl) confEl.textContent = avgConf;
+    }
+    function setLlmButtonState() {
+        const btn = document.getElementById('toggle-llm');
+        if (!btn) return;
+        btn.textContent = llmOnly ? 'LLM Only: On' : 'LLM Only: Off';
+        btn.classList.toggle('btn-active', llmOnly);
+    }
+    function clearLlmOnlyView() {
+        if (!llmOnly) return;
+        llmOnly = false;
+        setLlmButtonState();
+        setViewData(allData);
+    }
+    function toggleLlmOnly() {
+        if (!allData.nodes.length) { toast('Load a graph first'); return; }
+        llmOnly = !llmOnly;
+        setLlmButtonState();
+        setViewData(llmOnly ? getLlmSubgraph(allData) : allData);
+        toast(llmOnly ? 'Showing LLM-inferred lineage only' : 'Showing full lineage');
+    }
+
+    // ── Catalog ────────────────────────────────────────────────────────
+    function toggleCatalog() {
+        catalogVisible = !catalogVisible;
+        document.body.classList.toggle('catalog-hidden', !catalogVisible);
+        const btn = document.getElementById('toggle-catalog');
+        if (btn) btn.textContent = catalogVisible ? 'Hide Catalog' : 'Show Catalog';
+    }
+    function setLineageMode(dir) {
+        lineageMode = dir;
+        document.getElementById('lineage-upstream').classList.toggle('btn-active', dir === 'upstream');
+        document.getElementById('lineage-downstream').classList.toggle('btn-active', dir === 'downstream');
+    }
+
+    function buildCatalog(data) {
+        const container = document.getElementById('catalog-body');
+        const meta = document.getElementById('catalog-meta');
+        if (!container || !meta) return;
+
+        if (!data.nodes.length) {
+            meta.textContent = 'Run Analyze to build catalog.';
+            container.innerHTML = '<div class="catalog-empty">No tables loaded.</div>';
+            return;
+        }
+
+        const tableMap = new Map();
+        for (const n of data.nodes) {
+            if (isTableLike(n)) tableMap.set(n.id, { id: n.id, name: n.name || n.id, type: n.node_type, columns: [] });
+        }
+        for (const n of data.nodes) {
+            if (n.node_type !== 'COLUMN') continue;
+            const tbl = getColumnTableName(n);
+            if (!tbl) continue;
+            if (!tableMap.has(tbl)) tableMap.set(tbl, { id: tbl, name: tbl, type: 'TABLE', columns: [] });
+            tableMap.get(tbl).columns.push(n);
+        }
+
+        const tables = Array.from(tableMap.values()).sort((a, b) => a.name.localeCompare(b.name));
+        meta.textContent = `${tables.length} tables / views`;
+
+        let html = '';
+        for (const t of tables) {
+            const nt = (t.type || 'TABLE');
+            const typeClassMap = {
+                TABLE: 'badge badge-table', VIEW: 'badge badge-view',
+                PROCEDURE: 'badge badge-procedure', PYTHON_FUNCTION: 'badge badge-python-function',
+                ADF_PIPELINE: 'badge badge-table', ADF_DATASET: 'badge badge-table',
+                ADF_DATAFLOW: 'badge badge-table',
+            };
+            const typeClass = typeClassMap[nt] || 'badge badge-table';
+            const cols = t.columns.sort((a, b) => (a.name || a.id).localeCompare(b.name || b.id));
+            // searchText concatenates table name + every column name (lowercase) for the live filter.
+            const searchText = (t.name + ' ' + t.id + ' ' + cols.map(c => c.name || c.id).join(' ')).toLowerCase();
+            const cardTypeStr = nt.replace('_', ' ');
+            html += `<div class="table-card" data-search-text="${escAttr(searchText)}" data-node-type="${escAttr(nt)}">
+                <div class="table-title" onclick="catalogSelect('${escAttr(t.id)}')">
+                    <div class="name">${escHtml(t.name)}</div>
+                    <span class="${typeClass}">${escHtml(cardTypeStr)}</span>
+                </div>
+                <div class="column-list">`;
+            for (const col of cols.slice(0, 40)) {
+                html += `<div class="column-item" onclick="catalogSelect('${escAttr(col.id)}')">${escHtml(col.name || col.id)}</div>`;
+            }
+            if (cols.length > 40) html += `<div class="column-item" style="cursor:default">+${cols.length - 40}</div>`;
+            html += `</div></div>`;
+        }
+        container.innerHTML = html || '<div class="catalog-empty">No tables found.</div>';
+
+        // Build the type filter chips.
+        renderTypeFilter(tables);
+
+        // Re-apply current filters.
+        applyCatalogFilters();
+    }
+
+    function renderTypeFilter(tables) {
+        const counts = {};
+        for (const t of tables) {
+            counts[t.type] = (counts[t.type] || 0) + 1;
+        }
+        const types = Object.keys(counts).sort();
+        const el = document.getElementById('type-filter');
+        if (!el) return;
+        if (!types.length) { el.innerHTML = ''; return; }
+
+        const allActive = activeTypeFilter === null;
+        let html = `<div class="type-chip all ${allActive ? 'active' : ''}" onclick="setTypeFilter(null)" role="button" aria-pressed="${allActive}">All<span class="count">${tables.length}</span></div>`;
+        for (const t of types) {
+            const isActive = activeTypeFilter === t;
+            const label = t.replace('_', ' ');
+            html += `<div class="type-chip ${isActive ? 'active' : ''}" onclick="setTypeFilter('${escAttr(t)}')" role="button" aria-pressed="${isActive}">${escHtml(label)}<span class="count">${counts[t]}</span></div>`;
+        }
+        el.innerHTML = html;
+    }
+
+    function setTypeFilter(type) {
+        activeTypeFilter = (type === activeTypeFilter) ? null : type;
+        // Re-render the chip row so the active state updates.
+        const tables = [];
+        document.querySelectorAll('#catalog-body .table-card').forEach(card => {
+            tables.push({ type: card.getAttribute('data-node-type') });
+        });
+        renderTypeFilter(tables);
+        applyCatalogFilters();
+    }
+
+    function applyCatalogFilters() {
+        const searchQ = (document.getElementById('search')?.value || '').toLowerCase().trim();
+        const cards = document.querySelectorAll('#catalog-body .table-card');
+        let visibleCount = 0;
+        cards.forEach(card => {
+            const text = card.getAttribute('data-search-text') || '';
+            const nt = card.getAttribute('data-node-type') || '';
+            const searchMatch = !searchQ || text.includes(searchQ);
+            const typeMatch = !activeTypeFilter || nt === activeTypeFilter;
+            const match = searchMatch && typeMatch;
+            card.style.display = match ? '' : 'none';
+            if (match) visibleCount++;
+        });
+        const meta = document.getElementById('catalog-meta');
+        if (meta && cards.length) {
+            const filterDesc = activeTypeFilter ? ` (${activeTypeFilter.replace('_', ' ').toLowerCase()})` : '';
+            meta.textContent = (searchQ || activeTypeFilter)
+                ? `${visibleCount} of ${cards.length}${filterDesc}`
+                : `${cards.length} tables / views`;
         }
     }
 
-    async function loadGraph() {
-        const endpoint = useLocal ? '/graph-local' : '/graph';
-        const res = await fetch(endpoint);
-        allData = await res.json();
-        renderGraph(allData);
+    // Backwards-compatible alias used by the search input's oninput handler.
+    function filterCatalog(_query) {
+        applyCatalogFilters();
     }
 
+    function catalogSelect(nodeId) {
+        if (!allData.nodes.length) { toast('Run Analyze first'); return; }
+        lastSelectedNodeId = nodeId;
+        showNodeDetail(nodeId);
+        if (currentView === 'flow') {
+            renderFlowView(nodeId);
+        } else {
+            traceLineage(nodeId, lineageMode);
+        }
+    }
+
+    // ── View switching ─────────────────────────────────────────────────
+    function setView(view) {
+        currentView = view;
+        document.getElementById('view-flow').classList.toggle('btn-active', view === 'flow');
+        document.getElementById('view-graph').classList.toggle('btn-active', view === 'graph');
+        document.getElementById('flow-panel').classList.toggle('view-hidden', view !== 'flow');
+        document.getElementById('graph-panel').classList.toggle('view-hidden', view !== 'graph');
+
+        if (view === 'graph') {
+            if (!network && viewData.nodes.length) {
+                ensureVisLoaded().then(ok => { if (ok) renderGraph(viewData); });
+            } else if (network) {
+                setTimeout(() => { network.redraw(); network.fit({ animation: true }); }, 0);
+            }
+        }
+        if (view === 'flow' && lastSelectedNodeId) {
+            renderFlowView(lastSelectedNodeId);
+        }
+    }
+
+    function setViewData(data) {
+        viewData = data;
+        updateStatsForData(viewData);
+        buildCatalog(viewData);
+        if (currentView === 'graph') {
+            if (viewData.nodes.length) {
+                ensureVisLoaded().then(ok => {
+                    if (ok) renderGraph(viewData);
+                    else toast('Error: failed to load graph library');
+                });
+            } else {
+                renderGraph(viewData);
+            }
+        }
+        else if (currentView === 'flow' && lastSelectedNodeId) renderFlowView(lastSelectedNodeId);
+    }
+
+    function updateStatsForData(data) {
+        document.getElementById('stat-nodes').textContent = data.nodes.length;
+        document.getElementById('stat-edges').textContent = data.edges.length;
+        document.getElementById('stat-tables').textContent = data.nodes.filter(n => isTableNode(n)).length;
+        document.getElementById('stat-columns').textContent = data.nodes.filter(n => n.node_type === 'COLUMN').length;
+    }
+
+    // ── Graph view ─────────────────────────────────────────────────────
+    const NODE_COLORS = {
+        TABLE:           { background: '#1e3a5f', border: '#60a5fa', highlight: { background: '#2563eb', border: '#93c5fd' } },
+        VIEW:            { background: '#14362e', border: '#34d399', highlight: { background: '#059669', border: '#6ee7b7' } },
+        COLUMN:          { background: '#2d1b4e', border: '#c084fc', highlight: { background: '#7c3aed', border: '#d8b4fe' } },
+        PROCEDURE:       { background: '#3a1f06', border: '#fb923c', highlight: { background: '#c2410c', border: '#fdba74' } },
+        PYTHON_FUNCTION: { background: '#1f1a08', border: '#fbbf24', highlight: { background: '#b45309', border: '#fde68a' } },
+        FILE:            { background: '#1c1917', border: '#a8a29e', highlight: { background: '#44403c', border: '#d6d3d1' } },
+    };
+    const EDGE_COLORS = {
+        DERIVES_FROM: '#a78bfa', READS_FROM: '#60a5fa',
+        WRITES_TO: '#f87171',   HAS_COLUMN: '#1e293b', DEFINED_IN: '#1a2332',
+    };
+
     function renderGraph(data) {
-        document.getElementById('empty-state').style.display = 'none';
+        const empty = document.getElementById('graph-empty');
+        if (empty) empty.style.display = data.nodes.length ? 'none' : 'flex';
+        if (!data.nodes.length) return;
+        const visLib = window.vis || window.visNetwork;
+        if (!visLib || !visLib.DataSet || !visLib.Network) {
+            ensureVisLoaded().then(ok => {
+                if (ok) renderGraph(data);
+                else toast('Error: failed to load graph library');
+            });
+            return;
+        }
 
         const nodes = data.nodes.map(n => {
             const nt = n.node_type || 'TABLE';
             return {
-                id: n.id,
-                label: n.name || n.id,
-                shape: NODE_SHAPES[nt] || 'dot',
+                id: n.id, label: n.name || n.id,
+                shape: nt === 'COLUMN' ? 'dot' : nt === 'FILE' ? 'triangle' : nt.includes('PROCEDURE') || nt.includes('FUNCTION') ? 'diamond' : 'box',
                 color: NODE_COLORS[nt] || NODE_COLORS.TABLE,
-                font: { color: '#e2e8f0', size: nt === 'COLUMN' ? 10 : 13 },
-                size: nt === 'COLUMN' ? 8 : (nt === 'FILE' ? 12 : 20),
-                _type: nt,
-                _meta: n.metadata || '',
+                font: { color: '#e2e8f0', size: nt === 'COLUMN' ? 10 : 12 },
+                size: nt === 'COLUMN' ? 8 : nt === 'FILE' ? 12 : 18,
+                _type: nt, _meta: n.metadata || '',
             };
         });
-
         const edges = data.edges.map((e, i) => {
             const et = e.edge_type || e.type || 'DERIVES_FROM';
-            const conf = e.confidence != null ? e.confidence : 1.0;
+            const conf = edgeConfidence(e);
             return {
-                id: 'e' + i,
-                from: e.source_id || e.source,
-                to: e.target_id || e.target,
+                id: 'e' + i, from: edgeSource(e), to: edgeTarget(e),
                 arrows: 'to',
-                color: { color: EDGE_COLORS[et] || '#475569', opacity: 0.7 },
-                dashes: conf < 1.0,
-                width: et === 'DERIVES_FROM' ? 2 : 1,
-                label: et === 'DERIVES_FROM' && e.transformation ? e.transformation.substring(0, 30) : '',
-                font: { color: '#64748b', size: 9 },
-                _type: et,
-                _confidence: conf,
-                _transformation: e.transformation || '',
+                color: { color: EDGE_COLORS[et] || '#334155', opacity: 0.7 },
+                dashes: conf < 1.0, width: et === 'DERIVES_FROM' ? 2 : 1,
+                _type: et, _confidence: conf, _transformation: e.transformation || '',
             };
         });
 
-        // Update stats
-        document.getElementById('stat-nodes').textContent = nodes.length;
-        document.getElementById('stat-edges').textContent = edges.length;
-        document.getElementById('stat-tables').textContent = nodes.filter(n => n._type === 'TABLE' || n._type === 'VIEW').length;
-        document.getElementById('stat-columns').textContent = nodes.filter(n => n._type === 'COLUMN').length;
-
-        const container = document.getElementById('graph-container');
+        const container = document.getElementById('graph-panel');
         const visData = {
-            nodes: new vis.DataSet(nodes),
-            edges: new vis.DataSet(edges),
+            nodes: new visLib.DataSet(nodes),
+            edges: new visLib.DataSet(edges),
         };
         const options = {
             physics: {
@@ -258,140 +776,423 @@
             interaction: { hover: true, tooltipDelay: 200, zoomView: true },
             layout: { improvedLayout: true },
         };
-
-        network = new vis.Network(container, visData, options);
-        network.on('click', (params) => {
-            if (params.nodes.length > 0) showNodeDetail(params.nodes[0]);
+        network = new visLib.Network(container, visData, options);
+        network.on('click', params => {
+            if (params.nodes.length > 0) {
+                lastSelectedNodeId = params.nodes[0];
+                showNodeDetail(params.nodes[0]);
+            }
         });
     }
 
+    // ── Flow View ──────────────────────────────────────────────────────
+    function initFlowTableEntry(map, tableId, data) {
+        const tableNode = data.nodes.find(n => n.id === tableId && isTableLike(n))
+            || { id: tableId, name: tableId, node_type: 'TABLE' };
+        const columns = data.nodes
+            .filter(n => n.node_type === 'COLUMN' && getColumnTableName(n) === tableId)
+            .sort((a, b) => (a.name || a.id).localeCompare(b.name || b.id));
+        map.set(tableId, { tableNode, columns, connections: [] });
+    }
+
+    function buildFlowData(centerId, data) {
+        const centerNode = data.nodes.find(n => n.id === centerId);
+        if (!centerNode) return null;
+
+        const centerTableId = (centerNode.node_type === 'COLUMN')
+            ? getColumnTableName(centerNode)
+            : centerId;
+
+        const centerTableNode = data.nodes.find(n => n.id === centerTableId && isTableLike(n))
+            || { id: centerTableId, name: centerTableId, node_type: 'TABLE' };
+
+        const centerCols = data.nodes
+            .filter(n => n.node_type === 'COLUMN' && getColumnTableName(n) === centerTableId)
+            .sort((a, b) => (a.name || a.id).localeCompare(b.name || b.id));
+
+        const upMap = new Map();
+        const downMap = new Map();
+
+        for (const e of data.edges) {
+            const et = e.edge_type || e.type || '';
+            const src = edgeSource(e);
+            const tgt = edgeTarget(e);
+            const conf = edgeConfidence(e);
+            const llm = isLlmEdge(e);
+            const prefix = centerTableId + '.';
+
+            if (et === 'DERIVES_FROM') {
+                if (src.startsWith(prefix)) {
+                    // center.col derives from upstream.col
+                    const upId = tableFromColumnId(tgt);
+                    if (upId && upId !== centerTableId) {
+                        if (!upMap.has(upId)) initFlowTableEntry(upMap, upId, data);
+                        upMap.get(upId).connections.push({ centerColId: src, upstreamColId: tgt, confidence: conf, isLlm: llm });
+                    }
+                } else if (tgt.startsWith(prefix)) {
+                    // downstream.col derives from center.col
+                    const downId = tableFromColumnId(src);
+                    if (downId && downId !== centerTableId) {
+                        if (!downMap.has(downId)) initFlowTableEntry(downMap, downId, data);
+                        downMap.get(downId).connections.push({ centerColId: tgt, downstreamColId: src, confidence: conf, isLlm: llm });
+                    }
+                }
+            } else if (et === 'READS_FROM') {
+                // Backward-pointing: consumer (src) reads from producer (tgt).
+                if (src === centerTableId && tgt !== centerTableId) {
+                    if (!upMap.has(tgt)) initFlowTableEntry(upMap, tgt, data);
+                } else if (tgt === centerTableId && src !== centerTableId) {
+                    if (!downMap.has(src)) initFlowTableEntry(downMap, src, data);
+                }
+            } else if (et === 'WRITES_TO' || et === 'COPIES_TO' || et === 'TRIGGERS') {
+                // Forward-pointing: producer (src) writes/copies/triggers consumer (tgt).
+                if (src === centerTableId && tgt !== centerTableId) {
+                    if (!downMap.has(tgt)) initFlowTableEntry(downMap, tgt, data);
+                } else if (tgt === centerTableId && src !== centerTableId) {
+                    if (!upMap.has(src)) initFlowTableEntry(upMap, src, data);
+                }
+            }
+        }
+
+        return {
+            centerTableId,
+            centerTableNode,
+            centerCols,
+            upstream: Array.from(upMap.values()),
+            downstream: Array.from(downMap.values()),
+        };
+    }
+
+    function renderFlowCard(tableNode, columns, connections, role) {
+        const nt = (tableNode.node_type || 'TABLE').toLowerCase();
+        const isCenter = role === 'center';
+        const connectedColIds = new Set(connections.map(c =>
+            role === 'upstream' ? c.upstreamColId : role === 'downstream' ? c.downstreamColId : c
+        ));
+
+        const headerClass = isCenter ? '' : 'clickable';
+        const navigateAttr = isCenter ? '' : `onclick="navigateFlowTo('${escAttr(tableNode.id)}')"`;
+
+        const maxCols = 14;
+        const colsHtml = columns.slice(0, maxCols).map(col => {
+            const isConn = connectedColIds.has(col.id);
+            const connClass = isConn ? 'fc-connected' : '';
+            return `<div class="flow-col-item ${connClass}" id="${safeFlowId(col.id)}" data-col="${escAttr(col.id)}"
+                         onmouseenter="highlightFlowCol('${escAttr(col.id)}')"
+                         onmouseleave="unhighlightFlowCol()"
+                         onclick="showNodeDetail('${escAttr(col.id)}')">
+                <span class="flow-col-dot"></span>
+                <span class="flow-col-name">${escHtml(col.name || col.id)}</span>
+            </div>`;
+        }).join('');
+        const moreHtml = columns.length > maxCols
+            ? `<div class="flow-col-more">+${columns.length - maxCols} more columns</div>`
+            : '';
+
+        const cardClass = isCenter ? 'flow-card flow-card-center' : 'flow-card';
+        return `<div class="${cardClass}">
+            <div class="flow-card-header ${headerClass}" ${navigateAttr}>
+                <div class="flow-card-title" title="${escAttr(tableNode.name || tableNode.id)}">${escHtml(tableNode.name || tableNode.id)}</div>
+                <span class="flow-card-type type-${nt}">${(tableNode.node_type || 'TABLE').replace('_', ' ')}</span>
+            </div>
+            <div class="flow-card-columns">${colsHtml}${moreHtml}</div>
+            ${!isCenter ? `<div class="flow-card-nav" onclick="navigateFlowTo('${escAttr(tableNode.id)}')">
+                Focus this table →
+            </div>` : ''}
+        </div>`;
+    }
+
+    function renderFlowView(centerId) {
+        const emptyEl = document.getElementById('flow-empty');
+        const contentEl = document.getElementById('flow-content');
+        if (!viewData.nodes.length) {
+            if (emptyEl) emptyEl.style.display = 'flex';
+            if (contentEl) contentEl.style.display = 'none';
+            return;
+        }
+
+        const fd = buildFlowData(centerId, viewData);
+        if (!fd) {
+            if (emptyEl) emptyEl.style.display = 'flex';
+            if (contentEl) contentEl.style.display = 'none';
+            return;
+        }
+
+        if (emptyEl) emptyEl.style.display = 'none';
+        if (contentEl) contentEl.style.display = 'block';
+
+        // Breadcrumb
+        const bc = document.getElementById('flow-breadcrumb');
+        if (bc) bc.innerHTML = `<span class="crumb" onclick="catalogSelect('${escAttr(fd.centerTableId)}')">${escHtml(fd.centerTableNode.name || fd.centerTableId)}</span>`;
+
+        // Counts
+        const upCount = document.getElementById('up-count');
+        const downCount = document.getElementById('down-count');
+        if (upCount) upCount.textContent = fd.upstream.length;
+        if (downCount) downCount.textContent = fd.downstream.length;
+
+        // Render upstream
+        const upEl = document.getElementById('flow-upstream-col');
+        if (upEl) {
+            const header = upEl.querySelector('.flow-col-header');
+            upEl.innerHTML = '';
+            if (header) upEl.appendChild(header);
+            for (const entry of fd.upstream) {
+                const div = document.createElement('div');
+                div.innerHTML = renderFlowCard(entry.tableNode, entry.columns, entry.connections, 'upstream');
+                upEl.appendChild(div.firstElementChild);
+            }
+            if (!fd.upstream.length) {
+                const p = document.createElement('div');
+                p.style.cssText = 'font-size:11px;color:#1e293b;padding:8px 2px;';
+                p.textContent = 'No upstream sources found';
+                upEl.appendChild(p);
+            }
+        }
+
+        // Render center
+        const centerEl = document.getElementById('flow-center-col');
+        if (centerEl) {
+            const header = centerEl.querySelector('.flow-col-header');
+            centerEl.innerHTML = '';
+            if (header) centerEl.appendChild(header);
+            const allConnectedCols = new Set([
+                ...fd.upstream.flatMap(e => e.connections.map(c => c.centerColId)),
+                ...fd.downstream.flatMap(e => e.connections.map(c => c.centerColId)),
+            ]);
+            const div = document.createElement('div');
+            div.innerHTML = renderFlowCard(fd.centerTableNode, fd.centerCols, Array.from(allConnectedCols), 'center');
+            centerEl.appendChild(div.firstElementChild);
+        }
+
+        // Render downstream
+        const downEl = document.getElementById('flow-downstream-col');
+        if (downEl) {
+            const header = downEl.querySelector('.flow-col-header');
+            downEl.innerHTML = '';
+            if (header) downEl.appendChild(header);
+            for (const entry of fd.downstream) {
+                const div = document.createElement('div');
+                div.innerHTML = renderFlowCard(entry.tableNode, entry.columns, entry.connections, 'downstream');
+                downEl.appendChild(div.firstElementChild);
+            }
+            if (!fd.downstream.length) {
+                const p = document.createElement('div');
+                p.style.cssText = 'font-size:11px;color:#1e293b;padding:8px 2px;';
+                p.textContent = 'No downstream targets found';
+                downEl.appendChild(p);
+            }
+        }
+
+        // Draw connections after layout settles
+        window._currentFlowData = fd;
+        requestAnimationFrame(() => drawFlowConnections(fd));
+    }
+
+    function getFlowRect(colId) {
+        const el = document.getElementById(safeFlowId(colId));
+        const content = document.getElementById('flow-content');
+        const panel = document.getElementById('flow-panel');
+        if (!el || !content || !panel) return null;
+        const er = el.getBoundingClientRect();
+        const cr = content.getBoundingClientRect();
+        return {
+            left:  er.left  - cr.left,
+            right: er.right - cr.left,
+            midY:  (er.top + er.bottom) / 2 - cr.top,
+        };
+    }
+
+    function drawFlowConnections(fd) {
+        const svg = document.getElementById('flow-svg');
+        const content = document.getElementById('flow-content');
+        if (!svg || !content) return;
+
+        svg.setAttribute('width', content.offsetWidth);
+        svg.setAttribute('height', content.offsetHeight);
+
+        svg.innerHTML = `<defs>
+            <marker id="arr-det" markerWidth="7" markerHeight="7" refX="6" refY="3.5" orient="auto">
+                <path d="M 0 0 L 7 3.5 L 0 7 z" fill="rgba(99,102,241,0.55)"/>
+            </marker>
+            <marker id="arr-llm" markerWidth="7" markerHeight="7" refX="6" refY="3.5" orient="auto">
+                <path d="M 0 0 L 7 3.5 L 0 7 z" fill="rgba(245,158,11,0.55)"/>
+            </marker>
+        </defs>`;
+
+        function drawCurve(x1, y1, x2, y2, isLlm) {
+            if (x1 == null || x2 == null || isNaN(x1) || isNaN(y1) || isNaN(x2) || isNaN(y2)) return;
+            const dx = Math.min(Math.abs(x2 - x1) * 0.5, 60);
+            const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+            path.setAttribute('d', `M ${x1} ${y1} C ${x1+dx} ${y1} ${x2-dx} ${y2} ${x2} ${y2}`);
+            path.setAttribute('fill', 'none');
+            path.setAttribute('stroke', isLlm ? 'rgba(245,158,11,0.45)' : 'rgba(99,102,241,0.5)');
+            path.setAttribute('stroke-width', '1.5');
+            if (isLlm) path.setAttribute('stroke-dasharray', '5,4');
+            path.setAttribute('marker-end', isLlm ? 'url(#arr-llm)' : 'url(#arr-det)');
+            svg.appendChild(path);
+        }
+
+        for (const entry of fd.upstream) {
+            for (const conn of entry.connections) {
+                const upR = getFlowRect(conn.upstreamColId);
+                const cenR = getFlowRect(conn.centerColId);
+                if (upR && cenR) drawCurve(upR.right, upR.midY, cenR.left, cenR.midY, conn.isLlm);
+            }
+        }
+        for (const entry of fd.downstream) {
+            for (const conn of entry.connections) {
+                const cenR = getFlowRect(conn.centerColId);
+                const downR = getFlowRect(conn.downstreamColId);
+                if (cenR && downR) drawCurve(cenR.right, cenR.midY, downR.left, downR.midY, conn.isLlm);
+            }
+        }
+    }
+
+    function navigateFlowTo(tableId) {
+        lastSelectedNodeId = tableId;
+        showNodeDetail(tableId);
+        renderFlowView(tableId);
+    }
+
+    function highlightFlowCol(colId) {
+        const fd = window._currentFlowData;
+        if (!fd) return;
+
+        const relatedCols = new Set([colId]);
+
+        for (const entry of fd.upstream) {
+            for (const c of entry.connections) {
+                if (c.upstreamColId === colId) relatedCols.add(c.centerColId);
+                if (c.centerColId === colId) relatedCols.add(c.upstreamColId);
+            }
+        }
+        for (const entry of fd.downstream) {
+            for (const c of entry.connections) {
+                if (c.downstreamColId === colId) relatedCols.add(c.centerColId);
+                if (c.centerColId === colId) relatedCols.add(c.downstreamColId);
+            }
+        }
+
+        for (const id of relatedCols) {
+            const el = document.getElementById(safeFlowId(id));
+            if (el) el.classList.add('fc-highlighted');
+        }
+
+        // Highlight SVG paths
+        const svg = document.getElementById('flow-svg');
+        if (!svg) return;
+        const paths = svg.querySelectorAll('path[d]');
+        paths.forEach(p => {
+            const opacity = p.getAttribute('stroke').includes('arr') ? '1' : undefined;
+            p.setAttribute('opacity', '0.2');
+        });
+    }
+
+    function unhighlightFlowCol() {
+        document.querySelectorAll('.fc-highlighted').forEach(el => el.classList.remove('fc-highlighted'));
+        const svg = document.getElementById('flow-svg');
+        if (svg) svg.querySelectorAll('path[d]').forEach(p => p.removeAttribute('opacity'));
+    }
+
+    // ── Node detail ────────────────────────────────────────────────────
     async function showNodeDetail(nodeId) {
         const node = allData.nodes.find(n => n.id === nodeId);
         if (!node) return;
+        lastSelectedNodeId = nodeId;
 
         const nt = node.node_type || 'TABLE';
-        const badgeClass = 'badge badge-' + nt.toLowerCase().replace('_', '-');
+        const badgeClass = 'badge badge-' + nt.toLowerCase().replace(/_/g, '-');
 
-        let html = `
-            <h2>Node Detail</h2>
+        let html = `<h2 style="margin-bottom:10px">Node Detail</h2>
             <div class="node-detail">
-                <div class="label">ID</div>
-                <div class="value">${escHtml(node.id)}</div>
-            </div>
-            <div class="node-detail">
-                <div class="label">Name</div>
-                <div class="value">${escHtml(node.name || node.id)}</div>
+                <div class="lbl">Name</div>
+                <div class="val">${escHtml(node.name || node.id)}</div>
             </div>
             <div class="node-detail">
-                <div class="label">Type</div>
-                <div class="value"><span class="${badgeClass}">${nt}</span></div>
+                <div class="lbl">Type</div>
+                <div class="val"><span class="${badgeClass}">${nt}</span></div>
             </div>
-        `;
+            <div class="node-detail">
+                <div class="lbl">ID</div>
+                <div class="val" style="font-size:11px;color:#64748b">${escHtml(node.id)}</div>
+            </div>`;
 
-        // Upstream / downstream buttons
-        html += `
-            <div style="display:flex;gap:8px;margin:12px 0">
-                <button class="btn" onclick="traceLineage('${escAttr(nodeId)}','upstream')">↑ Upstream</button>
-                <button class="btn" onclick="traceLineage('${escAttr(nodeId)}','downstream')">↓ Downstream</button>
-                <button class="btn" onclick="showImpact('${escAttr(nodeId)}')">Impact</button>
-            </div>
-        `;
+        html += `<div style="display:flex;gap:6px;margin:12px 0;flex-wrap:wrap">
+            <button class="btn btn-mini" onclick="traceLineage('${escAttr(nodeId)}','upstream')">↑ Upstream</button>
+            <button class="btn btn-mini" onclick="traceLineage('${escAttr(nodeId)}','downstream')">↓ Downstream</button>
+            <button class="btn btn-mini" onclick="showImpact('${escAttr(nodeId)}')">Impact</button>
+            <button class="btn btn-mini" onclick="navigateFlowTo('${escAttr(nodeId)}')">Flow →</button>
+        </div>`;
 
-        // Show connected edges
         const connected = allData.edges.filter(e =>
-            (e.source_id || e.source) === nodeId || (e.target_id || e.target) === nodeId
+            edgeSource(e) === nodeId || edgeTarget(e) === nodeId
         );
-        if (connected.length > 0) {
-            html += `<h2 style="margin-top:16px">Connections (${connected.length})</h2>`;
-            for (const e of connected.slice(0, 20)) {
+        if (connected.length) {
+            html += `<h2 style="margin-top:14px;margin-bottom:8px">Connections (${connected.length})</h2>`;
+            for (const e of connected.slice(0, 15)) {
                 const et = e.edge_type || e.type || '';
-                const conf = e.confidence != null ? e.confidence : 1.0;
-                const confClass = conf >= 1.0 ? 'confidence-high' : 'confidence-medium';
-                html += `
-                    <div class="node-detail">
-                        <div class="label">${escHtml(et)}</div>
-                        <div class="value" style="font-size:12px">${escHtml((e.source_id||e.source))} → ${escHtml((e.target_id||e.target))}</div>
-                        ${e.transformation ? `<div style="color:#94a3b8;font-size:11px;margin-top:4px">${escHtml(e.transformation)}</div>` : ''}
-                        <div class="confidence-bar"><div class="confidence-fill ${confClass}" style="width:${conf*100}%"></div></div>
-                    </div>
-                `;
+                const conf = edgeConfidence(e);
+                const cfClass = conf >= 1.0 ? 'conf-high' : 'conf-med';
+                html += `<div class="node-detail">
+                    <div class="lbl">${escHtml(et)}</div>
+                    <div class="val" style="font-size:11px">${escHtml(edgeSource(e))} → ${escHtml(edgeTarget(e))}</div>
+                    ${e.transformation ? `<div style="color:#64748b;font-size:10px;margin-top:2px">${escHtml(e.transformation)}</div>` : ''}
+                    <div class="confidence-bar"><div class="confidence-fill ${cfClass}" style="width:${conf*100}%"></div></div>
+                </div>`;
             }
+            if (connected.length > 15) html += `<div style="font-size:11px;color:#475569;padding:4px 0">+${connected.length - 15} more edges</div>`;
         }
 
         document.getElementById('detail-panel').innerHTML = html;
     }
 
     async function traceLineage(nodeId, direction) {
-        const endpoint = useLocal ? null : `/${direction}/${encodeURIComponent(nodeId)}`;
-        if (!endpoint) {
-            // Local mode: compute from in-memory data
-            highlightSubgraph(nodeId, direction);
+        if (currentView === 'flow') {
+            renderFlowView(nodeId);
             return;
         }
-        try {
-            const res = await fetch(endpoint);
-            if (!res.ok) { toast(`No ${direction} found`); return; }
-            const data = await res.json();
-            renderGraph(data);
-            toast(`Showing ${direction} lineage for ${nodeId}`);
-        } catch (e) {
-            toast('Error: ' + e.message);
-        }
-    }
-
-    function highlightSubgraph(nodeId, direction) {
-        // BFS traversal in-memory for local mode
+        // Client-side BFS over the in-memory graph
+        const data = llmOnly ? viewData : allData;
         const visited = new Set([nodeId]);
         const queue = [nodeId];
-        while (queue.length > 0) {
-            const current = queue.shift();
-            for (const e of allData.edges) {
-                const src = e.source_id || e.source;
-                const tgt = e.target_id || e.target;
+        while (queue.length) {
+            const cur = queue.shift();
+            for (const e of data.edges) {
+                const src = edgeSource(e), tgt = edgeTarget(e);
                 let next = null;
-                if (direction === 'upstream' && src === current) next = tgt;
-                if (direction === 'downstream' && tgt === current) next = src;
-                if (next && !visited.has(next)) {
-                    visited.add(next);
-                    queue.push(next);
-                }
+                if (direction === 'upstream'   && src === cur) next = tgt;
+                if (direction === 'downstream' && tgt === cur) next = src;
+                if (next && !visited.has(next)) { visited.add(next); queue.push(next); }
             }
         }
-        // Highlight in network
         if (network) {
-            const nodeIds = Array.from(visited);
-            network.selectNodes(nodeIds);
-            toast(`${direction}: ${nodeIds.length} nodes`);
+            network.selectNodes(Array.from(visited));
+            toast(`${direction}: ${visited.size} nodes`);
         }
     }
 
     async function showImpact(nodeId) {
-        if (useLocal) {
-            traceLineage(nodeId, 'downstream');
-            return;
-        }
         try {
             const res = await fetch(`/impact/${encodeURIComponent(nodeId)}`);
             const data = await res.json();
-            let html = `
-                <h2>Impact Analysis</h2>
-                <div class="node-detail">
-                    <div class="label">Source</div>
-                    <div class="value">${escHtml(data.source)}</div>
-                </div>
-                <div class="node-detail">
-                    <div class="label">Total Affected</div>
-                    <div class="value" style="font-size:24px;font-weight:700;color:#f87171">${data.total_affected}</div>
-                </div>
-            `;
-            if (data.affected_tables.length) {
-                html += `<div class="node-detail"><div class="label">Affected Tables</div>`;
-                for (const t of data.affected_tables) html += `<div class="value" style="font-size:12px">• ${escHtml(t)}</div>`;
+            if (!res.ok) {
+                toast(data.detail || `No impact data for ${nodeId}`, 4000);
+                return;
+            }
+            let html = `<h2>Impact Analysis</h2>
+                <div class="node-detail"><div class="lbl">Source</div><div class="val">${escHtml(data.source)}</div></div>
+                <div class="node-detail"><div class="lbl">Total Affected</div>
+                    <div class="val" style="font-size:22px;font-weight:700;color:#f87171">${data.total_affected}</div>
+                </div>`;
+            if (data.affected_tables?.length) {
+                html += `<div class="node-detail"><div class="lbl">Affected Tables / Views</div>`;
+                data.affected_tables.forEach(t => { html += `<div class="val" style="font-size:11px">• ${escHtml(t)}</div>`; });
                 html += `</div>`;
             }
-            if (data.affected_columns.length) {
-                html += `<div class="node-detail"><div class="label">Affected Columns (first 20)</div>`;
-                for (const c of data.affected_columns.slice(0, 20)) html += `<div class="value" style="font-size:12px">• ${escHtml(c)}</div>`;
+            if (data.affected_columns?.length) {
+                html += `<div class="node-detail"><div class="lbl">Affected Columns (first 20)</div>`;
+                data.affected_columns.slice(0, 20).forEach(c => { html += `<div class="val" style="font-size:11px">• ${escHtml(c)}</div>`; });
                 html += `</div>`;
             }
             document.getElementById('detail-panel').innerHTML = html;
@@ -400,46 +1201,214 @@
         }
     }
 
+    // ── Controls ───────────────────────────────────────────────────────
     async function searchNodes() {
         const q = document.getElementById('search').value.trim();
         if (!q) return;
+        clearLlmOnlyView();
 
-        if (useLocal) {
-            // Local search
-            const matching = allData.nodes.filter(n =>
-                n.id.toLowerCase().includes(q.toLowerCase()) || (n.name||'').toLowerCase().includes(q.toLowerCase())
-            );
-            if (matching.length && network) {
-                network.selectNodes(matching.map(n => n.id));
-                network.focus(matching[0].id, { scale: 1.2, animation: true });
-                toast(`Found ${matching.length} nodes`);
-            } else {
-                toast('No matches found');
-            }
-            return;
-        }
+        const matching = viewData.nodes.filter(n =>
+            (n.id || '').toLowerCase().includes(q.toLowerCase()) ||
+            (n.name || '').toLowerCase().includes(q.toLowerCase())
+        );
 
-        try {
-            const res = await fetch(`/search?q=${encodeURIComponent(q)}`);
-            const data = await res.json();
-            if (data.length && network) {
-                network.selectNodes(data.map(n => n.id));
-                network.focus(data[0].id, { scale: 1.2, animation: true });
-                toast(`Found ${data.length} nodes`);
-            } else {
-                toast('No matches found');
-            }
-        } catch (e) {
-            toast('Error: ' + e.message);
+        if (!matching.length) { toast('No matches found'); return; }
+
+        if (currentView === 'flow' && matching.length > 0) {
+            const firstTable = matching.find(n => isTableLike(n)) || matching[0];
+            navigateFlowTo(firstTable.id);
+            toast(`Found ${matching.length} match${matching.length > 1 ? 'es' : ''}`);
+        } else if (network) {
+            network.selectNodes(matching.map(n => n.id));
+            network.focus(matching[0].id, { scale: 1.2, animation: true });
+            toast(`Found ${matching.length} nodes`);
         }
     }
 
     function resetView() {
-        if (allData.nodes.length) renderGraph(allData);
+        clearLlmOnlyView();
+        if (allData.nodes.length) setViewData(allData);
     }
 
-    function escHtml(s) { const d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
-    function escAttr(s) { return s.replace(/'/g, "\\'").replace(/"/g, '&quot;'); }
+    function downloadGraphJson() {
+        if (!allData.nodes.length) { toast('Run Analyze first'); return; }
+
+        // Build a richer view: each node gets its connections / columns / upstream / downstream.
+        // Edge direction is normalized so the BFS works uniformly:
+        //   - Backward-pointing edges (DERIVES_FROM, READS_FROM): src=consumer, tgt=producer.
+        //     Forward traversal from a node reaches its producers (upstream).
+        //   - Forward-pointing edges (WRITES_TO, COPIES_TO, TRIGGERS): src=producer, tgt=consumer.
+        //     We flip these so the same forward-traversal reaches producers.
+        const BACKWARD = new Set(['DERIVES_FROM', 'READS_FROM']);
+        const FORWARD = new Set(['WRITES_TO', 'COPIES_TO', 'TRIGGERS']);
+
+        const adjOut = {};      // X -> [edges where X is the source]
+        const adjIn = {};       // X -> [edges where X is the target]
+        const upAdj = {};       // X -> [producers of X] (for upstream BFS)
+        const downAdj = {};     // X -> [consumers of X] (for downstream BFS)
+
+        for (const e of allData.edges) {
+            const s = edgeSource(e), t = edgeTarget(e);
+            (adjOut[s] = adjOut[s] || []).push(e);
+            (adjIn[t] = adjIn[t] || []).push(e);
+
+            const et = e.edge_type || e.type;
+            if (BACKWARD.has(et)) {
+                // s is consumer, t is producer
+                (upAdj[s] = upAdj[s] || []).push(t);
+                (downAdj[t] = downAdj[t] || []).push(s);
+            } else if (FORWARD.has(et)) {
+                // s is producer, t is consumer — flip so traversal semantics match
+                (upAdj[t] = upAdj[t] || []).push(s);
+                (downAdj[s] = downAdj[s] || []).push(t);
+            }
+
+            // Special case: ADF dataset ↔ physical table aliasing is bidirectional
+            if (et === 'READS_FROM' && (e.transformation || '').includes('ADF dataset')) {
+                (upAdj[t] = upAdj[t] || []).push(s);
+                (downAdj[s] = downAdj[s] || []).push(t);
+            }
+        }
+
+        function bfs(startId, adj) {
+            const visited = new Set([startId]);
+            const queue = [startId];
+            const out = [];
+            while (queue.length) {
+                const cur = queue.shift();
+                for (const next of (adj[cur] || [])) {
+                    if (next && !visited.has(next)) { visited.add(next); queue.push(next); out.push(next); }
+                }
+            }
+            return out;
+        }
+
+        // Lookup: for ADF datasets aliased to a physical table, expose the table's columns
+        // so the JSON makes it obvious what data the dataset wraps.
+        const aliasedTable = {};  // adf.dataset.X -> physical_table_id
+        for (const e of allData.edges) {
+            if (e.edge_type === 'READS_FROM' && (e.transformation || '').includes('ADF dataset')) {
+                aliasedTable[edgeSource(e)] = edgeTarget(e);
+            }
+        }
+
+        const enriched = allData.nodes.map(n => {
+            const direct = (adjOut[n.id] || []).concat(adjIn[n.id] || []);
+            let columns;
+            if (n.node_type === 'TABLE' || n.node_type === 'VIEW') {
+                columns = allData.nodes
+                    .filter(c => c.node_type === 'COLUMN' && getColumnTableName(c) === n.id)
+                    .map(c => c.id);
+            } else if (n.node_type === 'ADF_DATASET' && aliasedTable[n.id]) {
+                // Surface the aliased table's columns so the dataset has searchable schema.
+                const tableId = aliasedTable[n.id];
+                columns = allData.nodes
+                    .filter(c => c.node_type === 'COLUMN' && getColumnTableName(c) === tableId)
+                    .map(c => c.id);
+            }
+            const result = {
+                id: n.id,
+                name: n.name,
+                node_type: n.node_type,
+                metadata: n.metadata,
+                columns,
+                upstream: bfs(n.id, upAdj),
+                downstream: bfs(n.id, downAdj),
+                connections: direct.map(e => ({
+                    source: edgeSource(e),
+                    target: edgeTarget(e),
+                    type: e.edge_type || e.type,
+                    transformation: e.transformation || '',
+                    confidence: edgeConfidence(e),
+                    is_llm: isLlmEdge(e),
+                })),
+            };
+            if (aliasedTable[n.id]) result.aliased_to = aliasedTable[n.id];
+            return result;
+        });
+
+        const payload = {
+            generated_at: new Date().toISOString(),
+            stats: {
+                nodes: allData.nodes.length,
+                edges: allData.edges.length,
+                tables: allData.nodes.filter(n => n.node_type === 'TABLE').length,
+                views: allData.nodes.filter(n => n.node_type === 'VIEW').length,
+                columns: allData.nodes.filter(n => n.node_type === 'COLUMN').length,
+                llm_edges: allData.edges.filter(isLlmEdge).length,
+            },
+            nodes: enriched,
+            edges: allData.edges,
+        };
+
+        const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `lineage-${new Date().toISOString().slice(0,19).replace(/[:T]/g,'-')}.json`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+        toast('Downloaded lineage JSON');
+    }
+
+    async function analyzeRepo() {
+        const btn = document.getElementById('btn-analyze');
+        if (btn) { btn.disabled = true; btn.textContent = 'Analyzing…'; }
+        try {
+            const res = await fetch('/analyze', { method: 'POST' });
+            const data = await res.json();
+            if (!res.ok) { toast('Error: ' + (data.detail || 'unknown')); return; }
+            if (!data.nodes_extracted) {
+                toast('No SQL/Python/ADF files found in the configured repo. Check REPO_PATH in .env.', 5000);
+                return;
+            }
+            toast(`Done: ${data.nodes_extracted} nodes, ${data.edges_extracted} edges`);
+            await loadGraph();
+        } catch (e) {
+            toast('Error: ' + e.message);
+        } finally {
+            if (btn) { btn.disabled = false; btn.textContent = 'Analyze'; }
+        }
+    }
+
+    async function loadGraph() {
+        try {
+            const res = await fetch('/graph');
+            if (!res.ok) throw new Error('Failed to load graph');
+            allData = await res.json();
+        } catch (e) {
+            toast('Error loading graph: ' + e.message);
+            return;
+        }
+
+        llmOnly = false;
+        setLlmButtonState();
+        setViewData(allData);
+        updateLlmStats(allData);
+
+        // Auto-navigate to first table in flow view
+        if (currentView === 'flow') {
+            const firstTable = allData.nodes.find(n => n.node_type === 'TABLE' || n.node_type === 'VIEW');
+            if (firstTable) {
+                lastSelectedNodeId = firstTable.id;
+                renderFlowView(firstTable.id);
+                showNodeDetail(firstTable.id);
+            }
+        }
+    }
+
+    // ── Resize: redraw SVG connections on panel resize ─────────────────
+    if (window.ResizeObserver) {
+        const ro = new ResizeObserver(() => {
+            if (currentView === 'flow' && window._currentFlowData) {
+                requestAnimationFrame(() => drawFlowConnections(window._currentFlowData));
+            }
+        });
+        const panel = document.getElementById('flow-panel');
+        if (panel) ro.observe(panel);
+    }
     </script>
 </body>
 </html>

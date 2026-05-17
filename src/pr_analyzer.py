@@ -83,10 +83,18 @@ def _file_content_at_ref(repo: git.Repo, ref: str, path: str) -> str | None:
 def _analyze_content(path: str, content: str) -> LineageGraph:
     """Write content to a temp file and run the analysis engine on it."""
     suffix = Path(path).suffix
-    with tempfile.NamedTemporaryFile(mode="w", suffix=suffix, delete=False, encoding="utf-8") as tmp:
-        tmp.write(content)
-        tmp.flush()
-        return analyze_file(tmp.name)
+    tmp_path: str | None = None
+    try:
+        with tempfile.NamedTemporaryFile(mode="w", suffix=suffix, delete=False, encoding="utf-8") as tmp:
+            tmp.write(content)
+            tmp_path = tmp.name
+        return analyze_file(tmp_path)
+    finally:
+        if tmp_path:
+            try:
+                Path(tmp_path).unlink(missing_ok=True)
+            except OSError:
+                pass
 
 
 # ── Core analysis ────────────────────────────────────────────────────

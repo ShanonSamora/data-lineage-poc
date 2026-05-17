@@ -145,6 +145,10 @@ def _parse_activity(activity: dict, pipeline_name: str, graph: LineageGraph, fil
         _parse_execute_pipeline(activity, pipeline_name, graph, source_repo)
     elif act_type in ("MappingDataFlow", "ExecuteDataFlow"):
         _parse_dataflow_activity(activity, pipeline_name, graph, source_repo)
+    elif act_type in ("DatabricksNotebook", "DatabricksPythonActivity", "AzureDatabricksActivity"):
+        _parse_notebook_activity(activity, pipeline_name, graph, source_repo)
+    elif act_type in ("SqlServerStoredProcedure", "StoredProcedure"):
+        _parse_stored_proc_activity(activity, pipeline_name, graph, source_repo)
     # Other activity types could be added here (Lookup, ForEach, etc.)
 
 
@@ -243,6 +247,67 @@ def _parse_dataflow_activity(activity: dict, pipeline_name: str, graph: LineageG
             target_id=df_node.id,
             edge_type=EdgeType.TRIGGERS,
         ))
+
+
+def _parse_notebook_activity(activity: dict, pipeline_name: str, graph: LineageGraph, source_repo: str) -> None:
+    """Extract notebook reference from a Databricks notebook activity.
+
+    Creates a FILE node for the notebook. If the path matches a file scanned by
+    other parsers (e.g., the Python parser), they merge by ID.
+    """
+    type_props = activity.get("typeProperties", {})
+    notebook_path = type_props.get("notebookPath") or type_props.get("pythonFile") or ""
+    if not notebook_path:
+        return
+
+    # Normalize separators to match what the Python parser produces via Path(...) on this OS.
+    # str(Path(...)) yields native separators (backslash on Windows, forward slash on POSIX).
+    normalized = str(Path(notebook_path))
+
+    file_node = LineageNode(
+        id=normalized,
+        name=Path(notebook_path).name,
+        node_type=NodeType.FILE,
+        source_repo=source_repo,
+        metadata={"path": notebook_path, "source": "adf-notebook"},
+    )
+    graph.nodes.append(file_node)
+    graph.edges.append(LineageEdge(
+        source_id=f"adf.pipeline.{pipeline_name}",
+        target_id=normalized,
+        edge_type=EdgeType.TRIGGERS,
+        transformation=f"Notebook({activity.get('name', '')})",
+    ))
+
+
+def _parse_stored_proc_activity(activity: dict, pipeline_name: str, graph: LineageGraph, source_repo: str) -> None:
+    """Extract stored procedure reference from a SqlServerStoredProcedure activity.
+
+    Creates a PROCEDURE node. If the procedure was also detected by the SQL/LLM
+    parser, the nodes merge by ID.
+    """
+    type_props = activity.get("typeProperties", {})
+    proc_name = type_props.get("storedProcedureName") or type_props.get("procedureName") or ""
+    if not proc_name:
+        return
+
+    # Drop schema prefix (e.g., "dbo.sp_refresh_monthly_summary" -> "sp_refresh_monthly_summary")
+    proc_id = proc_name.split(".")[-1].lower()
+
+    proc_node = LineageNode(
+        id=proc_id,
+        name=proc_id,
+        node_type=NodeType.PROCEDURE,
+        source_repo=source_repo,
+        metadata={"adf_reference": proc_name, "source": "adf-procedure"},
+    )
+    graph.nodes.append(proc_node)
+    graph.edges.append(LineageEdge(
+        source_id=f"adf.pipeline.{pipeline_name}",
+        target_id=proc_id,
+        edge_type=EdgeType.TRIGGERS,
+        transformation=f"StoredProcedure({activity.get('name', '')})",
+    ))
 
 
 # ── Dataset parsing ──────────────────────────────────────────────────

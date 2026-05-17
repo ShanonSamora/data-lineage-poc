@@ -1,0 +1,3425 @@
+{
+  "nodes": [
+    {
+      "id": "adf.dataset.BlobCustomersCSV",
+      "name": "BlobCustomersCSV",
+      "node_type": "ADF_DATASET",
+      "source_repo": "",
+      "metadata": {
+        "file": "sample_repo\\adf\\dataset\\BlobCustomersCSV.json"
+      }
+    },
+    {
+      "id": "adf.dataset.BlobExchangeRatesCSV",
+      "name": "BlobExchangeRatesCSV",
+      "node_type": "ADF_DATASET",
+      "source_repo": "",
+      "metadata": {
+        "file": "sample_repo\\adf\\dataset\\BlobExchangeRatesCSV.json"
+      }
+    },
+    {
+      "id": "adf.dataset.BlobTransactionsParquet",
+      "name": "BlobTransactionsParquet",
+      "node_type": "ADF_DATASET",
+      "source_repo": "",
+      "metadata": {
+        "file": "sample_repo\\adf\\dataset\\BlobTransactionsParquet.json"
+      }
+    },
+    {
+      "id": "adf.dataset.ExternalReportingMart",
+      "name": "ExternalReportingMart",
+      "node_type": "ADF_DATASET",
+      "source_repo": "",
+      "metadata": {
+        "file": "sample_repo\\adf\\dataset\\ExternalReportingMart.json"
+      }
+    },
+    {
+      "id": "bi.customer_exposure_snapshot",
+      "name": "customer_exposure_snapshot",
+      "node_type": "TABLE",
+      "source_repo": "",
+      "metadata": {
+        "resolved_from": "adf.dataset.ExternalReportingMart"
+      }
+    },
+    {
+      "id": "adf.dataset.SqlRptCustomerExposure",
+      "name": "SqlRptCustomerExposure",
+      "node_type": "ADF_DATASET",
+      "source_repo": "",
+      "metadata": {
+        "file": "sample_repo\\adf\\dataset\\SqlRptCustomerExposure.json"
+      }
+    },
+    {
+      "id": "rpt_customer_exposure",
+      "name": "rpt_customer_exposure",
+      "node_type": "TABLE",
+      "source_repo": "",
+      "metadata": {
+        "resolved_from": "adf.dataset.SqlRptCustomerExposure"
+      }
+    },
+    {
+      "id": "adf.dataset.SqlStgCustomers",
+      "name": "SqlStgCustomers",
+      "node_type": "ADF_DATASET",
+      "source_repo": "",
+      "metadata": {
+        "file": "sample_repo\\adf\\dataset\\SqlStgCustomers.json"
+      }
+    },
+    {
+      "id": "stg_customers",
+      "name": "stg_customers",
+      "node_type": "TABLE",
+      "source_repo": "",
+      "metadata": {
+        "resolved_from": "adf.dataset.SqlStgCustomers"
+      }
+    },
+    {
+      "id": "adf.dataset.SqlStgExchangeRates",
+      "name": "SqlStgExchangeRates",
+      "node_type": "ADF_DATASET",
+      "source_repo": "",
+      "metadata": {
+        "file": "sample_repo\\adf\\dataset\\SqlStgExchangeRates.json"
+      }
+    },
+    {
+      "id": "stg_exchange_rates",
+      "name": "stg_exchange_rates",
+      "node_type": "TABLE",
+      "source_repo": "",
+      "metadata": {
+        "resolved_from": "adf.dataset.SqlStgExchangeRates"
+      }
+    },
+    {
+      "id": "adf.dataset.SqlStgTransactions",
+      "name": "SqlStgTransactions",
+      "node_type": "ADF_DATASET",
+      "source_repo": "",
+      "metadata": {
+        "file": "sample_repo\\adf\\dataset\\SqlStgTransactions.json"
+      }
+    },
+    {
+      "id": "stg_transactions",
+      "name": "stg_transactions",
+      "node_type": "TABLE",
+      "source_repo": "",
+      "metadata": {
+        "resolved_from": "adf.dataset.SqlStgTransactions"
+      }
+    },
+    {
+      "id": "adf.pipeline.IngestRawData",
+      "name": "IngestRawData",
+      "node_type": "ADF_PIPELINE",
+      "source_repo": "",
+      "metadata": {
+        "file": "sample_repo\\adf\\pipeline\\IngestRawData.json"
+      }
+    },
+    {
+      "id": "file:sample_repo\\adf\\pipeline\\IngestRawData.json",
+      "name": "IngestRawData.json",
+      "node_type": "FILE",
+      "source_repo": "",
+      "metadata": {}
+    },
+    {
+      "id": "adf.pipeline.RefreshIntermediateLayer",
+      "name": "RefreshIntermediateLayer",
+      "node_type": "ADF_PIPELINE",
+      "source_repo": "",
+      "metadata": {}
+    },
+    {
+      "id": "file:sample_repo\\adf\\pipeline\\RefreshIntermediateLayer.json",
+      "name": "RefreshIntermediateLayer.json",
+      "node_type": "FILE",
+      "source_repo": "",
+      "metadata": {}
+    },
+    {
+      "id": "sample_repo\\python\\transform_pipeline.py",
+      "name": "transform_pipeline.py",
+      "node_type": "FILE",
+      "source_repo": "",
+      "metadata": {
+        "path": "sample_repo\\python\\transform_pipeline.py",
+        "source": "adf-notebook"
+      }
+    },
+    {
+      "id": "adf.pipeline.RefreshReportingMart",
+      "name": "RefreshReportingMart",
+      "node_type": "ADF_PIPELINE",
+      "source_repo": "",
+      "metadata": {}
+    },
+    {
+      "id": "file:sample_repo\\adf\\pipeline\\RefreshReportingMart.json",
+      "name": "RefreshReportingMart.json",
+      "node_type": "FILE",
+      "source_repo": "",
+      "metadata": {}
+    },
+    {
+      "id": "sp_refresh_monthly_summary",
+      "name": "sp_refresh_monthly_summary",
+      "node_type": "PROCEDURE",
+      "source_repo": "",
+      "metadata": {
+        "adf_reference": "sp_refresh_monthly_summary",
+        "source": "adf-procedure"
+      }
+    },
+    {
+      "id": "int_customers",
+      "name": "int_customers",
+      "node_type": "VIEW",
+      "source_repo": "",
+      "metadata": {
+        "file": "sample_repo\\sql\\02_intermediate_views.sql"
+      }
+    },
+    {
+      "id": "int_daily_balances",
+      "name": "int_daily_balances",
+      "node_type": "VIEW",
+      "source_repo": "",
+      "metadata": {
+        "file": "sample_repo\\sql\\02_intermediate_views.sql"
+      }
+    },
+    {
+      "id": "int_transaction_risk",
+      "name": "int_transaction_risk",
+      "node_type": "VIEW",
+      "source_repo": "",
+      "metadata": {
+        "file": "sample_repo\\sql\\02_intermediate_views.sql"
+      }
+    },
+    {
+      "id": "int_python_customer_scores",
+      "name": "int_python_customer_scores",
+      "node_type": "TABLE",
+      "source_repo": "",
+      "metadata": {
+        "file": "sample_repo\\python\\transform_pipeline.py",
+        "source": "llm"
+      }
+    },
+    {
+      "id": "int_python_customer_scores.customer_id",
+      "name": "customer_id",
+      "node_type": "COLUMN",
+      "source_repo": "",
+      "metadata": {
+        "table": "int_python_customer_scores"
+      }
+    },
+    {
+      "id": "int_customers.customer_id",
+      "name": "customer_id",
+      "node_type": "COLUMN",
+      "source_repo": "",
+      "metadata": {
+        "table": "int_customers"
+      }
+    },
+    {
+      "id": "int_python_customer_scores.full_name",
+      "name": "full_name",
+      "node_type": "COLUMN",
+      "source_repo": "",
+      "metadata": {
+        "table": "int_python_customer_scores"
+      }
+    },
+    {
+      "id": "int_customers.full_name",
+      "name": "full_name",
+      "node_type": "COLUMN",
+      "source_repo": "",
+      "metadata": {
+        "table": "int_customers"
+      }
+    },
+    {
+      "id": "int_python_customer_scores.customer_region",
+      "name": "customer_region",
+      "node_type": "COLUMN",
+      "source_repo": "",
+      "metadata": {
+        "table": "int_python_customer_scores"
+      }
+    },
+    {
+      "id": "int_customers.customer_region",
+      "name": "customer_region",
+      "node_type": "COLUMN",
+      "source_repo": "",
+      "metadata": {
+        "table": "int_customers"
+      }
+    },
+    {
+      "id": "int_python_customer_scores.account_id",
+      "name": "account_id",
+      "node_type": "COLUMN",
+      "source_repo": "",
+      "metadata": {
+        "table": "int_python_customer_scores"
+      }
+    },
+    {
+      "id": "int_customers.account_id",
+      "name": "account_id",
+      "node_type": "COLUMN",
+      "source_repo": "",
+      "metadata": {
+        "table": "int_customers"
+      }
+    },
+    {
+      "id": "int_python_customer_scores.account_type",
+      "name": "account_type",
+      "node_type": "COLUMN",
+      "source_repo": "",
+      "metadata": {
+        "table": "int_python_customer_scores"
+      }
+    },
+    {
+      "id": "int_customers.account_type",
+      "name": "account_type",
+      "node_type": "COLUMN",
+      "source_repo": "",
+      "metadata": {
+        "table": "int_customers"
+      }
+    },
+    {
+      "id": "int_python_customer_scores.total_net_usd",
+      "name": "total_net_usd",
+      "node_type": "COLUMN",
+      "source_repo": "",
+      "metadata": {
+        "table": "int_python_customer_scores"
+      }
+    },
+    {
+      "id": "int_daily_balances.daily_net_amount_usd",
+      "name": "daily_net_amount_usd",
+      "node_type": "COLUMN",
+      "source_repo": "",
+      "metadata": {
+        "table": "int_daily_balances"
+      }
+    },
+    {
+      "id": "int_python_customer_scores.avg_daily_balance",
+      "name": "avg_daily_balance",
+      "node_type": "COLUMN",
+      "source_repo": "",
+      "metadata": {
+        "table": "int_python_customer_scores",
+        "source": "llm"
+      }
+    },
+    {
+      "id": "int_daily_balances.daily_net_amount",
+      "name": "daily_net_amount",
+      "node_type": "COLUMN",
+      "source_repo": "",
+      "metadata": {
+        "table": "int_daily_balances"
+      }
+    },
+    {
+      "id": "int_python_customer_scores.balance_volatility_usd",
+      "name": "balance_volatility_usd",
+      "node_type": "COLUMN",
+      "source_repo": "",
+      "metadata": {
+        "table": "int_python_customer_scores"
+      }
+    },
+    {
+      "id": "int_python_customer_scores.high_risk_txn_count",
+      "name": "high_risk_txn_count",
+      "node_type": "COLUMN",
+      "source_repo": "",
+      "metadata": {
+        "table": "int_python_customer_scores"
+      }
+    },
+    {
+      "id": "int_transaction_risk.risk_level",
+      "name": "risk_level",
+      "node_type": "COLUMN",
+      "source_repo": "",
+      "metadata": {
+        "table": "int_transaction_risk"
+      }
+    },
+    {
+      "id": "int_python_customer_scores.anonymous_txn_count",
+      "name": "anonymous_txn_count",
+      "node_type": "COLUMN",
+      "source_repo": "",
+      "metadata": {
+        "table": "int_python_customer_scores"
+      }
+    },
+    {
+      "id": "int_transaction_risk.is_anonymous",
+      "name": "is_anonymous",
+      "node_type": "COLUMN",
+      "source_repo": "",
+      "metadata": {
+        "table": "int_transaction_risk"
+      }
+    },
+    {
+      "id": "int_python_customer_scores.txn_count",
+      "name": "txn_count",
+      "node_type": "COLUMN",
+      "source_repo": "",
+      "metadata": {
+        "table": "int_python_customer_scores",
+        "source": "llm"
+      }
+    },
+    {
+      "id": "int_transaction_risk.transaction_id",
+      "name": "transaction_id",
+      "node_type": "COLUMN",
+      "source_repo": "",
+      "metadata": {
+        "table": "int_transaction_risk"
+      }
+    },
+    {
+      "id": "int_python_customer_scores.risk_score",
+      "name": "risk_score",
+      "node_type": "COLUMN",
+      "source_repo": "",
+      "metadata": {
+        "table": "int_python_customer_scores"
+      }
+    },
+    {
+      "id": "int_python_customer_scores.segment",
+      "name": "segment",
+      "node_type": "COLUMN",
+      "source_repo": "",
+      "metadata": {
+        "table": "int_python_customer_scores"
+      }
+    },
+    {
+      "id": "sample_repo\\sql\\01_staging_tables.sql",
+      "name": "01_staging_tables.sql",
+      "node_type": "FILE",
+      "source_repo": "",
+      "metadata": {
+        "path": "sample_repo\\sql\\01_staging_tables.sql"
+      }
+    },
+    {
+      "id": "stg_customers.customer_id",
+      "name": "customer_id",
+      "node_type": "COLUMN",
+      "source_repo": "",
+      "metadata": {
+        "table": "stg_customers"
+      }
+    },
+    {
+      "id": "stg_customers.first_name",
+      "name": "first_name",
+      "node_type": "COLUMN",
+      "source_repo": "",
+      "metadata": {
+        "table": "stg_customers"
+      }
+    },
+    {
+      "id": "stg_customers.last_name",
+      "name": "last_name",
+      "node_type": "COLUMN",
+      "source_repo": "",
+      "metadata": {
+        "table": "stg_customers"
+      }
+    },
+    {
+      "id": "stg_customers.email",
+      "name": "email",
+      "node_type": "COLUMN",
+      "source_repo": "",
+      "metadata": {
+        "table": "stg_customers"
+      }
+    },
+    {
+      "id": "stg_customers.phone",
+      "name": "phone",
+      "node_type": "COLUMN",
+      "source_repo": "",
+      "metadata": {
+        "table": "stg_customers"
+      }
+    },
+    {
+      "id": "stg_customers.country_code",
+      "name": "country_code",
+      "node_type": "COLUMN",
+      "source_repo": "",
+      "metadata": {
+        "table": "stg_customers"
+      }
+    },
+    {
+      "id": "stg_customers.created_at",
+      "name": "created_at",
+      "node_type": "COLUMN",
+      "source_repo": "",
+      "metadata": {
+        "table": "stg_customers"
+      }
+    },
+    {
+      "id": "stg_customers.updated_at",
+      "name": "updated_at",
+      "node_type": "COLUMN",
+      "source_repo": "",
+      "metadata": {
+        "table": "stg_customers"
+      }
+    },
+    {
+      "id": "stg_accounts",
+      "name": "stg_accounts",
+      "node_type": "TABLE",
+      "source_repo": "",
+      "metadata": {
+        "file": "sample_repo\\sql\\01_staging_tables.sql"
+      }
+    },
+    {
+      "id": "stg_accounts.account_id",
+      "name": "account_id",
+      "node_type": "COLUMN",
+      "source_repo": "",
+      "metadata": {
+        "table": "stg_accounts"
+      }
+    },
+    {
+      "id": "stg_accounts.customer_id",
+      "name": "customer_id",
+      "node_type": "COLUMN",
+      "source_repo": "",
+      "metadata": {
+        "table": "stg_accounts"
+      }
+    },
+    {
+      "id": "stg_accounts.account_type",
+      "name": "account_type",
+      "node_type": "COLUMN",
+      "source_repo": "",
+      "metadata": {
+        "table": "stg_accounts"
+      }
+    },
+    {
+      "id": "stg_accounts.currency",
+      "name": "currency",
+      "node_type": "COLUMN",
+      "source_repo": "",
+      "metadata": {
+        "table": "stg_accounts"
+      }
+    },
+    {
+      "id": "stg_accounts.opened_date",
+      "name": "opened_date",
+      "node_type": "COLUMN",
+      "source_repo": "",
+      "metadata": {
+        "table": "stg_accounts"
+      }
+    },
+    {
+      "id": "stg_accounts.status",
+      "name": "status",
+      "node_type": "COLUMN",
+      "source_repo": "",
+      "metadata": {
+        "table": "stg_accounts"
+      }
+    },
+    {
+      "id": "stg_accounts.branch_id",
+      "name": "branch_id",
+      "node_type": "COLUMN",
+      "source_repo": "",
+      "metadata": {
+        "table": "stg_accounts"
+      }
+    },
+    {
+      "id": "stg_transactions.transaction_id",
+      "name": "transaction_id",
+      "node_type": "COLUMN",
+      "source_repo": "",
+      "metadata": {
+        "table": "stg_transactions"
+      }
+    },
+    {
+      "id": "stg_transactions.account_id",
+      "name": "account_id",
+      "node_type": "COLUMN",
+      "source_repo": "",
+      "metadata": {
+        "table": "stg_transactions"
+      }
+    },
+    {
+      "id": "stg_transactions.transaction_date",
+      "name": "transaction_date",
+      "node_type": "COLUMN",
+      "source_repo": "",
+      "metadata": {
+        "table": "stg_transactions"
+      }
+    },
+    {
+      "id": "stg_transactions.amount",
+      "name": "amount",
+      "node_type": "COLUMN",
+      "source_repo": "",
+      "metadata": {
+        "table": "stg_transactions"
+      }
+    },
+    {
+      "id": "stg_transactions.currency",
+      "name": "currency",
+      "node_type": "COLUMN",
+      "source_repo": "",
+      "metadata": {
+        "table": "stg_transactions"
+      }
+    },
+    {
+      "id": "stg_transactions.transaction_type",
+      "name": "transaction_type",
+      "node_type": "COLUMN",
+      "source_repo": "",
+      "metadata": {
+        "table": "stg_transactions"
+      }
+    },
+    {
+      "id": "stg_transactions.description",
+      "name": "description",
+      "node_type": "COLUMN",
+      "source_repo": "",
+      "metadata": {
+        "table": "stg_transactions"
+      }
+    },
+    {
+      "id": "stg_transactions.counterparty_id",
+      "name": "counterparty_id",
+      "node_type": "COLUMN",
+      "source_repo": "",
+      "metadata": {
+        "table": "stg_transactions"
+      }
+    },
+    {
+      "id": "stg_exchange_rates.rate_date",
+      "name": "rate_date",
+      "node_type": "COLUMN",
+      "source_repo": "",
+      "metadata": {
+        "table": "stg_exchange_rates"
+      }
+    },
+    {
+      "id": "stg_exchange_rates.from_currency",
+      "name": "from_currency",
+      "node_type": "COLUMN",
+      "source_repo": "",
+      "metadata": {
+        "table": "stg_exchange_rates"
+      }
+    },
+    {
+      "id": "stg_exchange_rates.to_currency",
+      "name": "to_currency",
+      "node_type": "COLUMN",
+      "source_repo": "",
+      "metadata": {
+        "table": "stg_exchange_rates"
+      }
+    },
+    {
+      "id": "stg_exchange_rates.rate",
+      "name": "rate",
+      "node_type": "COLUMN",
+      "source_repo": "",
+      "metadata": {
+        "table": "stg_exchange_rates"
+      }
+    },
+    {
+      "id": "stg_branches",
+      "name": "stg_branches",
+      "node_type": "TABLE",
+      "source_repo": "",
+      "metadata": {
+        "file": "sample_repo\\sql\\01_staging_tables.sql"
+      }
+    },
+    {
+      "id": "stg_branches.branch_id",
+      "name": "branch_id",
+      "node_type": "COLUMN",
+      "source_repo": "",
+      "metadata": {
+        "table": "stg_branches"
+      }
+    },
+    {
+      "id": "stg_branches.branch_name",
+      "name": "branch_name",
+      "node_type": "COLUMN",
+      "source_repo": "",
+      "metadata": {
+        "table": "stg_branches"
+      }
+    },
+    {
+      "id": "stg_branches.region",
+      "name": "region",
+      "node_type": "COLUMN",
+      "source_repo": "",
+      "metadata": {
+        "table": "stg_branches"
+      }
+    },
+    {
+      "id": "stg_branches.country_code",
+      "name": "country_code",
+      "node_type": "COLUMN",
+      "source_repo": "",
+      "metadata": {
+        "table": "stg_branches"
+      }
+    },
+    {
+      "id": "sample_repo\\sql\\02_intermediate_views.sql",
+      "name": "02_intermediate_views.sql",
+      "node_type": "FILE",
+      "source_repo": "",
+      "metadata": {
+        "path": "sample_repo\\sql\\02_intermediate_views.sql"
+      }
+    },
+    {
+      "id": "int_customers.email",
+      "name": "email",
+      "node_type": "COLUMN",
+      "source_repo": "",
+      "metadata": {
+        "table": "int_customers"
+      }
+    },
+    {
+      "id": "int_customers.country_code",
+      "name": "country_code",
+      "node_type": "COLUMN",
+      "source_repo": "",
+      "metadata": {
+        "table": "int_customers"
+      }
+    },
+    {
+      "id": "int_customers.account_currency",
+      "name": "account_currency",
+      "node_type": "COLUMN",
+      "source_repo": "",
+      "metadata": {
+        "table": "int_customers"
+      }
+    },
+    {
+      "id": "int_customers.account_status",
+      "name": "account_status",
+      "node_type": "COLUMN",
+      "source_repo": "",
+      "metadata": {
+        "table": "int_customers"
+      }
+    },
+    {
+      "id": "int_daily_balances.account_id",
+      "name": "account_id",
+      "node_type": "COLUMN",
+      "source_repo": "",
+      "metadata": {
+        "table": "int_daily_balances"
+      }
+    },
+    {
+      "id": "int_daily_balances.balance_date",
+      "name": "balance_date",
+      "node_type": "COLUMN",
+      "source_repo": "",
+      "metadata": {
+        "table": "int_daily_balances"
+      }
+    },
+    {
+      "id": "int_daily_balances.original_currency",
+      "name": "original_currency",
+      "node_type": "COLUMN",
+      "source_repo": "",
+      "metadata": {
+        "table": "int_daily_balances"
+      }
+    },
+    {
+      "id": "int_transaction_risk.account_id",
+      "name": "account_id",
+      "node_type": "COLUMN",
+      "source_repo": "",
+      "metadata": {
+        "table": "int_transaction_risk"
+      }
+    },
+    {
+      "id": "int_transaction_risk.amount",
+      "name": "amount",
+      "node_type": "COLUMN",
+      "source_repo": "",
+      "metadata": {
+        "table": "int_transaction_risk"
+      }
+    },
+    {
+      "id": "int_transaction_risk.currency",
+      "name": "currency",
+      "node_type": "COLUMN",
+      "source_repo": "",
+      "metadata": {
+        "table": "int_transaction_risk"
+      }
+    },
+    {
+      "id": "int_transaction_risk.transaction_date",
+      "name": "transaction_date",
+      "node_type": "COLUMN",
+      "source_repo": "",
+      "metadata": {
+        "table": "int_transaction_risk"
+      }
+    },
+    {
+      "id": "int_transaction_risk.transaction_type",
+      "name": "transaction_type",
+      "node_type": "COLUMN",
+      "source_repo": "",
+      "metadata": {
+        "table": "int_transaction_risk"
+      }
+    },
+    {
+      "id": "int_transaction_risk.counterparty_id",
+      "name": "counterparty_id",
+      "node_type": "COLUMN",
+      "source_repo": "",
+      "metadata": {
+        "table": "int_transaction_risk"
+      }
+    },
+    {
+      "id": "sample_repo\\sql\\03_reporting_tables.sql",
+      "name": "03_reporting_tables.sql",
+      "node_type": "FILE",
+      "source_repo": "",
+      "metadata": {
+        "path": "sample_repo\\sql\\03_reporting_tables.sql"
+      }
+    },
+    {
+      "id": "rpt_customer_exposure.customer_id",
+      "name": "customer_id",
+      "node_type": "COLUMN",
+      "source_repo": "",
+      "metadata": {
+        "table": "rpt_customer_exposure"
+      }
+    },
+    {
+      "id": "rpt_customer_exposure.full_name",
+      "name": "full_name",
+      "node_type": "COLUMN",
+      "source_repo": "",
+      "metadata": {
+        "table": "rpt_customer_exposure"
+      }
+    },
+    {
+      "id": "rpt_customer_exposure.customer_region",
+      "name": "customer_region",
+      "node_type": "COLUMN",
+      "source_repo": "",
+      "metadata": {
+        "table": "rpt_customer_exposure"
+      }
+    },
+    {
+      "id": "rpt_customer_exposure.account_id",
+      "name": "account_id",
+      "node_type": "COLUMN",
+      "source_repo": "",
+      "metadata": {
+        "table": "rpt_customer_exposure"
+      }
+    },
+    {
+      "id": "rpt_customer_exposure.account_type",
+      "name": "account_type",
+      "node_type": "COLUMN",
+      "source_repo": "",
+      "metadata": {
+        "table": "rpt_customer_exposure"
+      }
+    },
+    {
+      "id": "rpt_customer_exposure.account_currency",
+      "name": "account_currency",
+      "node_type": "COLUMN",
+      "source_repo": "",
+      "metadata": {
+        "table": "rpt_customer_exposure"
+      }
+    },
+    {
+      "id": "rpt_customer_exposure.balance_date",
+      "name": "balance_date",
+      "node_type": "COLUMN",
+      "source_repo": "",
+      "metadata": {
+        "table": "rpt_customer_exposure"
+      }
+    },
+    {
+      "id": "rpt_customer_exposure.daily_net_amount",
+      "name": "daily_net_amount",
+      "node_type": "COLUMN",
+      "source_repo": "",
+      "metadata": {
+        "table": "rpt_customer_exposure"
+      }
+    },
+    {
+      "id": "rpt_customer_exposure.daily_net_amount_usd",
+      "name": "daily_net_amount_usd",
+      "node_type": "COLUMN",
+      "source_repo": "",
+      "metadata": {
+        "table": "rpt_customer_exposure"
+      }
+    },
+    {
+      "id": "rpt_customer_exposure.risk_level",
+      "name": "risk_level",
+      "node_type": "COLUMN",
+      "source_repo": "",
+      "metadata": {
+        "table": "rpt_customer_exposure"
+      }
+    },
+    {
+      "id": "rpt_customer_exposure.is_anonymous",
+      "name": "is_anonymous",
+      "node_type": "COLUMN",
+      "source_repo": "",
+      "metadata": {
+        "table": "rpt_customer_exposure"
+      }
+    },
+    {
+      "id": "rpt_customer_exposure.python_risk_score",
+      "name": "python_risk_score",
+      "node_type": "COLUMN",
+      "source_repo": "",
+      "metadata": {
+        "table": "rpt_customer_exposure"
+      }
+    },
+    {
+      "id": "rpt_customer_exposure.python_risk_segment",
+      "name": "python_risk_segment",
+      "node_type": "COLUMN",
+      "source_repo": "",
+      "metadata": {
+        "table": "rpt_customer_exposure"
+      }
+    },
+    {
+      "id": "rpt_customer_exposure.cumulative_exposure_usd",
+      "name": "cumulative_exposure_usd",
+      "node_type": "COLUMN",
+      "source_repo": "",
+      "metadata": {
+        "table": "rpt_customer_exposure"
+      }
+    },
+    {
+      "id": "rpt_regional_risk_summary",
+      "name": "rpt_regional_risk_summary",
+      "node_type": "VIEW",
+      "source_repo": "",
+      "metadata": {
+        "file": "sample_repo\\sql\\03_reporting_tables.sql"
+      }
+    },
+    {
+      "id": "rpt_regional_risk_summary.customer_region",
+      "name": "customer_region",
+      "node_type": "COLUMN",
+      "source_repo": "",
+      "metadata": {
+        "table": "rpt_regional_risk_summary"
+      }
+    },
+    {
+      "id": "rpt_regional_risk_summary.risk_level",
+      "name": "risk_level",
+      "node_type": "COLUMN",
+      "source_repo": "",
+      "metadata": {
+        "table": "rpt_regional_risk_summary"
+      }
+    },
+    {
+      "id": "rpt_regional_risk_summary.python_risk_segment",
+      "name": "python_risk_segment",
+      "node_type": "COLUMN",
+      "source_repo": "",
+      "metadata": {
+        "table": "rpt_regional_risk_summary"
+      }
+    },
+    {
+      "id": "rpt_regional_risk_summary.transaction_count",
+      "name": "transaction_count",
+      "node_type": "COLUMN",
+      "source_repo": "",
+      "metadata": {
+        "table": "rpt_regional_risk_summary"
+      }
+    },
+    {
+      "id": "rpt_regional_risk_summary.total_amount",
+      "name": "total_amount",
+      "node_type": "COLUMN",
+      "source_repo": "",
+      "metadata": {
+        "table": "rpt_regional_risk_summary"
+      }
+    },
+    {
+      "id": "rpt_regional_risk_summary.customer_count",
+      "name": "customer_count",
+      "node_type": "COLUMN",
+      "source_repo": "",
+      "metadata": {
+        "table": "rpt_regional_risk_summary"
+      }
+    },
+    {
+      "id": "rpt_regional_risk_summary.avg_python_risk_score",
+      "name": "avg_python_risk_score",
+      "node_type": "COLUMN",
+      "source_repo": "",
+      "metadata": {
+        "table": "rpt_regional_risk_summary"
+      }
+    },
+    {
+      "id": "rpt_customer_scorecard",
+      "name": "rpt_customer_scorecard",
+      "node_type": "VIEW",
+      "source_repo": "",
+      "metadata": {
+        "file": "sample_repo\\sql\\03_reporting_tables.sql"
+      }
+    },
+    {
+      "id": "rpt_customer_scorecard.customer_id",
+      "name": "customer_id",
+      "node_type": "COLUMN",
+      "source_repo": "",
+      "metadata": {
+        "table": "rpt_customer_scorecard"
+      }
+    },
+    {
+      "id": "rpt_customer_scorecard.full_name",
+      "name": "full_name",
+      "node_type": "COLUMN",
+      "source_repo": "",
+      "metadata": {
+        "table": "rpt_customer_scorecard"
+      }
+    },
+    {
+      "id": "rpt_customer_scorecard.customer_region",
+      "name": "customer_region",
+      "node_type": "COLUMN",
+      "source_repo": "",
+      "metadata": {
+        "table": "rpt_customer_scorecard"
+      }
+    },
+    {
+      "id": "rpt_customer_scorecard.account_id",
+      "name": "account_id",
+      "node_type": "COLUMN",
+      "source_repo": "",
+      "metadata": {
+        "table": "rpt_customer_scorecard"
+      }
+    },
+    {
+      "id": "rpt_customer_scorecard.account_type",
+      "name": "account_type",
+      "node_type": "COLUMN",
+      "source_repo": "",
+      "metadata": {
+        "table": "rpt_customer_scorecard"
+      }
+    },
+    {
+      "id": "rpt_customer_scorecard.total_net_usd",
+      "name": "total_net_usd",
+      "node_type": "COLUMN",
+      "source_repo": "",
+      "metadata": {
+        "table": "rpt_customer_scorecard"
+      }
+    },
+    {
+      "id": "rpt_customer_scorecard.balance_volatility_usd",
+      "name": "balance_volatility_usd",
+      "node_type": "COLUMN",
+      "source_repo": "",
+      "metadata": {
+        "table": "rpt_customer_scorecard"
+      }
+    },
+    {
+      "id": "rpt_customer_scorecard.high_risk_txn_count",
+      "name": "high_risk_txn_count",
+      "node_type": "COLUMN",
+      "source_repo": "",
+      "metadata": {
+        "table": "rpt_customer_scorecard"
+      }
+    },
+    {
+      "id": "rpt_customer_scorecard.anonymous_txn_count",
+      "name": "anonymous_txn_count",
+      "node_type": "COLUMN",
+      "source_repo": "",
+      "metadata": {
+        "table": "rpt_customer_scorecard"
+      }
+    },
+    {
+      "id": "rpt_customer_scorecard.risk_score",
+      "name": "risk_score",
+      "node_type": "COLUMN",
+      "source_repo": "",
+      "metadata": {
+        "table": "rpt_customer_scorecard"
+      }
+    },
+    {
+      "id": "rpt_customer_scorecard.segment",
+      "name": "segment",
+      "node_type": "COLUMN",
+      "source_repo": "",
+      "metadata": {
+        "table": "rpt_customer_scorecard"
+      }
+    },
+    {
+      "id": "rpt_customer_scorecard.account_currency",
+      "name": "account_currency",
+      "node_type": "COLUMN",
+      "source_repo": "",
+      "metadata": {
+        "table": "rpt_customer_scorecard"
+      }
+    },
+    {
+      "id": "rpt_customer_scorecard.account_status",
+      "name": "account_status",
+      "node_type": "COLUMN",
+      "source_repo": "",
+      "metadata": {
+        "table": "rpt_customer_scorecard"
+      }
+    },
+    {
+      "id": "sample_repo\\sql\\04_stored_procedures.sql",
+      "name": "04_stored_procedures.sql",
+      "node_type": "FILE",
+      "source_repo": "",
+      "metadata": {
+        "path": "sample_repo\\sql\\04_stored_procedures.sql"
+      }
+    },
+    {
+      "id": "rpt_monthly_summary",
+      "name": "rpt_monthly_summary",
+      "node_type": "TABLE",
+      "source_repo": "",
+      "metadata": {
+        "file": "sample_repo\\sql\\04_stored_procedures.sql",
+        "source": "llm"
+      }
+    },
+    {
+      "id": "rpt_monthly_summary.customer_id",
+      "name": "customer_id",
+      "node_type": "COLUMN",
+      "source_repo": "",
+      "metadata": {
+        "table": "rpt_monthly_summary",
+        "source": "llm"
+      }
+    },
+    {
+      "id": "rpt_monthly_summary.full_name",
+      "name": "full_name",
+      "node_type": "COLUMN",
+      "source_repo": "",
+      "metadata": {
+        "table": "rpt_monthly_summary",
+        "source": "llm"
+      }
+    },
+    {
+      "id": "rpt_monthly_summary.region",
+      "name": "region",
+      "node_type": "COLUMN",
+      "source_repo": "",
+      "metadata": {
+        "table": "rpt_monthly_summary",
+        "source": "llm"
+      }
+    },
+    {
+      "id": "rpt_monthly_summary.total_credits",
+      "name": "total_credits",
+      "node_type": "COLUMN",
+      "source_repo": "",
+      "metadata": {
+        "table": "rpt_monthly_summary",
+        "source": "llm"
+      }
+    },
+    {
+      "id": "rpt_monthly_summary.total_debits",
+      "name": "total_debits",
+      "node_type": "COLUMN",
+      "source_repo": "",
+      "metadata": {
+        "table": "rpt_monthly_summary",
+        "source": "llm"
+      }
+    },
+    {
+      "id": "rpt_monthly_summary.net_position_usd",
+      "name": "net_position_usd",
+      "node_type": "COLUMN",
+      "source_repo": "",
+      "metadata": {
+        "table": "rpt_monthly_summary",
+        "source": "llm"
+      }
+    },
+    {
+      "id": "rpt_monthly_summary.max_risk_level",
+      "name": "max_risk_level",
+      "node_type": "COLUMN",
+      "source_repo": "",
+      "metadata": {
+        "table": "rpt_monthly_summary",
+        "source": "llm"
+      }
+    },
+    {
+      "id": "rpt_monthly_summary.transaction_count",
+      "name": "transaction_count",
+      "node_type": "COLUMN",
+      "source_repo": "",
+      "metadata": {
+        "table": "rpt_monthly_summary",
+        "source": "llm"
+      }
+    }
+  ],
+  "edges": [
+    {
+      "source_id": "adf.dataset.ExternalReportingMart",
+      "target_id": "bi.customer_exposure_snapshot",
+      "edge_type": "READS_FROM",
+      "transformation": "ADF dataset \u2192 physical table",
+      "confidence": 1.0,
+      "metadata": {}
+    },
+    {
+      "source_id": "adf.dataset.SqlRptCustomerExposure",
+      "target_id": "rpt_customer_exposure",
+      "edge_type": "READS_FROM",
+      "transformation": "ADF dataset \u2192 physical table",
+      "confidence": 1.0,
+      "metadata": {}
+    },
+    {
+      "source_id": "adf.dataset.SqlStgCustomers",
+      "target_id": "stg_customers",
+      "edge_type": "READS_FROM",
+      "transformation": "ADF dataset \u2192 physical table",
+      "confidence": 1.0,
+      "metadata": {}
+    },
+    {
+      "source_id": "adf.dataset.SqlStgExchangeRates",
+      "target_id": "stg_exchange_rates",
+      "edge_type": "READS_FROM",
+      "transformation": "ADF dataset \u2192 physical table",
+      "confidence": 1.0,
+      "metadata": {}
+    },
+    {
+      "source_id": "adf.dataset.SqlStgTransactions",
+      "target_id": "stg_transactions",
+      "edge_type": "READS_FROM",
+      "transformation": "ADF dataset \u2192 physical table",
+      "confidence": 1.0,
+      "metadata": {}
+    },
+    {
+      "source_id": "adf.pipeline.IngestRawData",
+      "target_id": "file:sample_repo\\adf\\pipeline\\IngestRawData.json",
+      "edge_type": "DEFINED_IN",
+      "transformation": "",
+      "confidence": 1.0,
+      "metadata": {}
+    },
+    {
+      "source_id": "adf.pipeline.IngestRawData",
+      "target_id": "adf.dataset.BlobCustomersCSV",
+      "edge_type": "READS_FROM",
+      "transformation": "",
+      "confidence": 1.0,
+      "metadata": {}
+    },
+    {
+      "source_id": "adf.pipeline.IngestRawData",
+      "target_id": "adf.dataset.SqlStgCustomers",
+      "edge_type": "WRITES_TO",
+      "transformation": "",
+      "confidence": 1.0,
+      "metadata": {}
+    },
+    {
+      "source_id": "adf.dataset.BlobCustomersCSV",
+      "target_id": "adf.dataset.SqlStgCustomers",
+      "edge_type": "COPIES_TO",
+      "transformation": "Copy(CopyCustomersBlobToStg)",
+      "confidence": 1.0,
+      "metadata": {}
+    },
+    {
+      "source_id": "adf.pipeline.IngestRawData",
+      "target_id": "adf.dataset.BlobTransactionsParquet",
+      "edge_type": "READS_FROM",
+      "transformation": "",
+      "confidence": 1.0,
+      "metadata": {}
+    },
+    {
+      "source_id": "adf.pipeline.IngestRawData",
+      "target_id": "adf.dataset.SqlStgTransactions",
+      "edge_type": "WRITES_TO",
+      "transformation": "",
+      "confidence": 1.0,
+      "metadata": {}
+    },
+    {
+      "source_id": "adf.dataset.BlobTransactionsParquet",
+      "target_id": "adf.dataset.SqlStgTransactions",
+      "edge_type": "COPIES_TO",
+      "transformation": "Copy(CopyTransactionsBlobToStg)",
+      "confidence": 1.0,
+      "metadata": {}
+    },
+    {
+      "source_id": "adf.pipeline.IngestRawData",
+      "target_id": "adf.dataset.BlobExchangeRatesCSV",
+      "edge_type": "READS_FROM",
+      "transformation": "",
+      "confidence": 1.0,
+      "metadata": {}
+    },
+    {
+      "source_id": "adf.pipeline.IngestRawData",
+      "target_id": "adf.dataset.SqlStgExchangeRates",
+      "edge_type": "WRITES_TO",
+      "transformation": "",
+      "confidence": 1.0,
+      "metadata": {}
+    },
+    {
+      "source_id": "adf.dataset.BlobExchangeRatesCSV",
+      "target_id": "adf.dataset.SqlStgExchangeRates",
+      "edge_type": "COPIES_TO",
+      "transformation": "Copy(CopyExchangeRatesBlobToStg)",
+      "confidence": 1.0,
+      "metadata": {}
+    },
+    {
+      "source_id": "adf.pipeline.IngestRawData",
+      "target_id": "adf.pipeline.RefreshIntermediateLayer",
+      "edge_type": "TRIGGERS",
+      "transformation": "",
+      "confidence": 1.0,
+      "metadata": {}
+    },
+    {
+      "source_id": "adf.pipeline.RefreshIntermediateLayer",
+      "target_id": "file:sample_repo\\adf\\pipeline\\RefreshIntermediateLayer.json",
+      "edge_type": "DEFINED_IN",
+      "transformation": "",
+      "confidence": 1.0,
+      "metadata": {}
+    },
+    {
+      "source_id": "adf.pipeline.RefreshIntermediateLayer",
+      "target_id": "sample_repo\\python\\transform_pipeline.py",
+      "edge_type": "TRIGGERS",
+      "transformation": "Notebook(RunPythonRiskScoring)",
+      "confidence": 1.0,
+      "metadata": {}
+    },
+    {
+      "source_id": "adf.pipeline.RefreshIntermediateLayer",
+      "target_id": "adf.pipeline.RefreshReportingMart",
+      "edge_type": "TRIGGERS",
+      "transformation": "",
+      "confidence": 1.0,
+      "metadata": {}
+    },
+    {
+      "source_id": "adf.pipeline.RefreshReportingMart",
+      "target_id": "file:sample_repo\\adf\\pipeline\\RefreshReportingMart.json",
+      "edge_type": "DEFINED_IN",
+      "transformation": "",
+      "confidence": 1.0,
+      "metadata": {}
+    },
+    {
+      "source_id": "adf.pipeline.RefreshReportingMart",
+      "target_id": "sp_refresh_monthly_summary",
+      "edge_type": "TRIGGERS",
+      "transformation": "StoredProcedure(RunMonthlySummaryProc)",
+      "confidence": 1.0,
+      "metadata": {}
+    },
+    {
+      "source_id": "adf.pipeline.RefreshReportingMart",
+      "target_id": "adf.dataset.SqlRptCustomerExposure",
+      "edge_type": "READS_FROM",
+      "transformation": "",
+      "confidence": 1.0,
+      "metadata": {}
+    },
+    {
+      "source_id": "adf.pipeline.RefreshReportingMart",
+      "target_id": "adf.dataset.ExternalReportingMart",
+      "edge_type": "WRITES_TO",
+      "transformation": "",
+      "confidence": 1.0,
+      "metadata": {}
+    },
+    {
+      "source_id": "adf.dataset.SqlRptCustomerExposure",
+      "target_id": "adf.dataset.ExternalReportingMart",
+      "edge_type": "COPIES_TO",
+      "transformation": "Copy(ExportExposureToBIMart)",
+      "confidence": 1.0,
+      "metadata": {}
+    },
+    {
+      "source_id": "int_customers",
+      "target_id": "sample_repo\\python\\transform_pipeline.py",
+      "edge_type": "DEFINED_IN",
+      "transformation": "",
+      "confidence": 1.0,
+      "metadata": {}
+    },
+    {
+      "source_id": "int_daily_balances",
+      "target_id": "sample_repo\\python\\transform_pipeline.py",
+      "edge_type": "DEFINED_IN",
+      "transformation": "",
+      "confidence": 1.0,
+      "metadata": {}
+    },
+    {
+      "source_id": "int_transaction_risk",
+      "target_id": "sample_repo\\python\\transform_pipeline.py",
+      "edge_type": "DEFINED_IN",
+      "transformation": "",
+      "confidence": 1.0,
+      "metadata": {}
+    },
+    {
+      "source_id": "int_python_customer_scores",
+      "target_id": "sample_repo\\python\\transform_pipeline.py",
+      "edge_type": "DEFINED_IN",
+      "transformation": "",
+      "confidence": 1.0,
+      "metadata": {}
+    },
+    {
+      "source_id": "int_python_customer_scores",
+      "target_id": "int_python_customer_scores.customer_id",
+      "edge_type": "HAS_COLUMN",
+      "transformation": "",
+      "confidence": 1.0,
+      "metadata": {}
+    },
+    {
+      "source_id": "int_customers",
+      "target_id": "int_customers.customer_id",
+      "edge_type": "HAS_COLUMN",
+      "transformation": "",
+      "confidence": 1.0,
+      "metadata": {}
+    },
+    {
+      "source_id": "int_python_customer_scores.customer_id",
+      "target_id": "int_customers.customer_id",
+      "edge_type": "DERIVES_FROM",
+      "transformation": "direct copy",
+      "confidence": 0.85,
+      "metadata": {
+        "source": "llm"
+      }
+    },
+    {
+      "source_id": "int_python_customer_scores",
+      "target_id": "int_python_customer_scores.full_name",
+      "edge_type": "HAS_COLUMN",
+      "transformation": "",
+      "confidence": 1.0,
+      "metadata": {}
+    },
+    {
+      "source_id": "int_customers",
+      "target_id": "int_customers.full_name",
+      "edge_type": "HAS_COLUMN",
+      "transformation": "",
+      "confidence": 1.0,
+      "metadata": {}
+    },
+    {
+      "source_id": "int_python_customer_scores.full_name",
+      "target_id": "int_customers.full_name",
+      "edge_type": "DERIVES_FROM",
+      "transformation": "direct copy",
+      "confidence": 0.85,
+      "metadata": {
+        "source": "llm"
+      }
+    },
+    {
+      "source_id": "int_python_customer_scores",
+      "target_id": "int_python_customer_scores.customer_region",
+      "edge_type": "HAS_COLUMN",
+      "transformation": "",
+      "confidence": 1.0,
+      "metadata": {}
+    },
+    {
+      "source_id": "int_customers",
+      "target_id": "int_customers.customer_region",
+      "edge_type": "HAS_COLUMN",
+      "transformation": "",
+      "confidence": 1.0,
+      "metadata": {}
+    },
+    {
+      "source_id": "int_python_customer_scores.customer_region",
+      "target_id": "int_customers.customer_region",
+      "edge_type": "DERIVES_FROM",
+      "transformation": "direct copy",
+      "confidence": 0.85,
+      "metadata": {
+        "source": "llm"
+      }
+    },
+    {
+      "source_id": "int_python_customer_scores",
+      "target_id": "int_python_customer_scores.account_id",
+      "edge_type": "HAS_COLUMN",
+      "transformation": "",
+      "confidence": 1.0,
+      "metadata": {}
+    },
+    {
+      "source_id": "int_customers",
+      "target_id": "int_customers.account_id",
+      "edge_type": "HAS_COLUMN",
+      "transformation": "",
+      "confidence": 1.0,
+      "metadata": {}
+    },
+    {
+      "source_id": "int_python_customer_scores.account_id",
+      "target_id": "int_customers.account_id",
+      "edge_type": "DERIVES_FROM",
+      "transformation": "direct copy",
+      "confidence": 0.85,
+      "metadata": {
+        "source": "llm"
+      }
+    },
+    {
+      "source_id": "int_python_customer_scores",
+      "target_id": "int_python_customer_scores.account_type",
+      "edge_type": "HAS_COLUMN",
+      "transformation": "",
+      "confidence": 1.0,
+      "metadata": {}
+    },
+    {
+      "source_id": "int_customers",
+      "target_id": "int_customers.account_type",
+      "edge_type": "HAS_COLUMN",
+      "transformation": "",
+      "confidence": 1.0,
+      "metadata": {}
+    },
+    {
+      "source_id": "int_python_customer_scores.account_type",
+      "target_id": "int_customers.account_type",
+      "edge_type": "DERIVES_FROM",
+      "transformation": "direct copy",
+      "confidence": 0.85,
+      "metadata": {
+        "source": "llm"
+      }
+    },
+    {
+      "source_id": "int_python_customer_scores",
+      "target_id": "int_python_customer_scores.total_net_usd",
+      "edge_type": "HAS_COLUMN",
+      "transformation": "",
+      "confidence": 1.0,
+      "metadata": {}
+    },
+    {
+      "source_id": "int_daily_balances",
+      "target_id": "int_daily_balances.daily_net_amount_usd",
+      "edge_type": "HAS_COLUMN",
+      "transformation": "",
+      "confidence": 1.0,
+      "metadata": {}
+    },
+    {
+      "source_id": "int_python_customer_scores.total_net_usd",
+      "target_id": "int_daily_balances.daily_net_amount_usd",
+      "edge_type": "DERIVES_FROM",
+      "transformation": "sum aggregation by account_id",
+      "confidence": 0.85,
+      "metadata": {
+        "source": "llm"
+      }
+    },
+    {
+      "source_id": "int_python_customer_scores",
+      "target_id": "int_python_customer_scores.avg_daily_balance",
+      "edge_type": "HAS_COLUMN",
+      "transformation": "",
+      "confidence": 1.0,
+      "metadata": {}
+    },
+    {
+      "source_id": "int_daily_balances",
+      "target_id": "int_daily_balances.daily_net_amount",
+      "edge_type": "HAS_COLUMN",
+      "transformation": "",
+      "confidence": 1.0,
+      "metadata": {}
+    },
+    {
+      "source_id": "int_python_customer_scores.avg_daily_balance",
+      "target_id": "int_daily_balances.daily_net_amount",
+      "edge_type": "DERIVES_FROM",
+      "transformation": "mean aggregation by account_id",
+      "confidence": 0.85,
+      "metadata": {
+        "source": "llm"
+      }
+    },
+    {
+      "source_id": "int_python_customer_scores",
+      "target_id": "int_python_customer_scores.balance_volatility_usd",
+      "edge_type": "HAS_COLUMN",
+      "transformation": "",
+      "confidence": 1.0,
+      "metadata": {}
+    },
+    {
+      "source_id": "int_python_customer_scores.balance_volatility_usd",
+      "target_id": "int_daily_balances.daily_net_amount_usd",
+      "edge_type": "DERIVES_FROM",
+      "transformation": "standard deviation aggregation by account_id, nulls replaced with 0",
+      "confidence": 0.85,
+      "metadata": {
+        "source": "llm"
+      }
+    },
+    {
+      "source_id": "int_python_customer_scores",
+      "target_id": "int_python_customer_scores.high_risk_txn_count",
+      "edge_type": "HAS_COLUMN",
+      "transformation": "",
+      "confidence": 1.0,
+      "metadata": {}
+    },
+    {
+      "source_id": "int_transaction_risk",
+      "target_id": "int_transaction_risk.risk_level",
+      "edge_type": "HAS_COLUMN",
+      "transformation": "",
+      "confidence": 1.0,
+      "metadata": {}
+    },
+    {
+      "source_id": "int_python_customer_scores.high_risk_txn_count",
+      "target_id": "int_transaction_risk.risk_level",
+      "edge_type": "DERIVES_FROM",
+      "transformation": "count of risk_level='HIGH' by account_id",
+      "confidence": 0.85,
+      "metadata": {
+        "source": "llm"
+      }
+    },
+    {
+      "source_id": "int_python_customer_scores",
+      "target_id": "int_python_customer_scores.anonymous_txn_count",
+      "edge_type": "HAS_COLUMN",
+      "transformation": "",
+      "confidence": 1.0,
+      "metadata": {}
+    },
+    {
+      "source_id": "int_transaction_risk",
+      "target_id": "int_transaction_risk.is_anonymous",
+      "edge_type": "HAS_COLUMN",
+      "transformation": "",
+      "confidence": 1.0,
+      "metadata": {}
+    },
+    {
+      "source_id": "int_python_customer_scores.anonymous_txn_count",
+      "target_id": "int_transaction_risk.is_anonymous",
+      "edge_type": "DERIVES_FROM",
+      "transformation": "sum aggregation by account_id",
+      "confidence": 0.85,
+      "metadata": {
+        "source": "llm"
+      }
+    },
+    {
+      "source_id": "int_python_customer_scores",
+      "target_id": "int_python_customer_scores.txn_count",
+      "edge_type": "HAS_COLUMN",
+      "transformation": "",
+      "confidence": 1.0,
+      "metadata": {}
+    },
+    {
+      "source_id": "int_transaction_risk",
+      "target_id": "int_transaction_risk.transaction_id",
+      "edge_type": "HAS_COLUMN",
+      "transformation": "",
+      "confidence": 1.0,
+      "metadata": {}
+    },
+    {
+      "source_id": "int_python_customer_scores.txn_count",
+      "target_id": "int_transaction_risk.transaction_id",
+      "edge_type": "DERIVES_FROM",
+      "transformation": "count aggregation by account_id",
+      "confidence": 0.85,
+      "metadata": {
+        "source": "llm"
+      }
+    },
+    {
+      "source_id": "int_python_customer_scores",
+      "target_id": "int_python_customer_scores.risk_score",
+      "edge_type": "HAS_COLUMN",
+      "transformation": "",
+      "confidence": 1.0,
+      "metadata": {}
+    },
+    {
+      "source_id": "int_python_customer_scores.risk_score",
+      "target_id": "int_daily_balances.daily_net_amount_usd",
+      "edge_type": "DERIVES_FROM",
+      "transformation": "computed from balance_volatility_usd (std of daily_net_amount_usd), high_risk_txn_count, anonymous_txn_count, txn_count with weighted formula",
+      "confidence": 0.85,
+      "metadata": {
+        "source": "llm"
+      }
+    },
+    {
+      "source_id": "int_python_customer_scores.risk_score",
+      "target_id": "int_transaction_risk.risk_level",
+      "edge_type": "DERIVES_FROM",
+      "transformation": "computed from balance_volatility_usd, high_risk_txn_count, anonymous_txn_count, txn_count with weighted formula",
+      "confidence": 0.85,
+      "metadata": {
+        "source": "llm"
+      }
+    },
+    {
+      "source_id": "int_python_customer_scores.risk_score",
+      "target_id": "int_transaction_risk.is_anonymous",
+      "edge_type": "DERIVES_FROM",
+      "transformation": "computed from balance_volatility_usd, high_risk_txn_count, anonymous_txn_count, txn_count with weighted formula",
+      "confidence": 0.85,
+      "metadata": {
+        "source": "llm"
+      }
+    },
+    {
+      "source_id": "int_python_customer_scores.risk_score",
+      "target_id": "int_transaction_risk.transaction_id",
+      "edge_type": "DERIVES_FROM",
+      "transformation": "computed from balance_volatility_usd, high_risk_txn_count, anonymous_txn_count, txn_count with weighted formula",
+      "confidence": 0.85,
+      "metadata": {
+        "source": "llm"
+      }
+    },
+    {
+      "source_id": "int_python_customer_scores",
+      "target_id": "int_python_customer_scores.segment",
+      "edge_type": "HAS_COLUMN",
+      "transformation": "",
+      "confidence": 1.0,
+      "metadata": {}
+    },
+    {
+      "source_id": "int_python_customer_scores.segment",
+      "target_id": "int_python_customer_scores.risk_score",
+      "edge_type": "DERIVES_FROM",
+      "transformation": "bucket assignment based on risk_score thresholds",
+      "confidence": 0.85,
+      "metadata": {
+        "source": "llm"
+      }
+    },
+    {
+      "source_id": "stg_customers",
+      "target_id": "sample_repo\\sql\\01_staging_tables.sql",
+      "edge_type": "DEFINED_IN",
+      "transformation": "",
+      "confidence": 1.0,
+      "metadata": {}
+    },
+    {
+      "source_id": "stg_customers",
+      "target_id": "stg_customers.customer_id",
+      "edge_type": "HAS_COLUMN",
+      "transformation": "",
+      "confidence": 1.0,
+      "metadata": {}
+    },
+    {
+      "source_id": "stg_customers",
+      "target_id": "stg_customers.first_name",
+      "edge_type": "HAS_COLUMN",
+      "transformation": "",
+      "confidence": 1.0,
+      "metadata": {}
+    },
+    {
+      "source_id": "stg_customers",
+      "target_id": "stg_customers.last_name",
+      "edge_type": "HAS_COLUMN",
+      "transformation": "",
+      "confidence": 1.0,
+      "metadata": {}
+    },
+    {
+      "source_id": "stg_customers",
+      "target_id": "stg_customers.email",
+      "edge_type": "HAS_COLUMN",
+      "transformation": "",
+      "confidence": 1.0,
+      "metadata": {}
+    },
+    {
+      "source_id": "stg_customers",
+      "target_id": "stg_customers.phone",
+      "edge_type": "HAS_COLUMN",
+      "transformation": "",
+      "confidence": 1.0,
+      "metadata": {}
+    },
+    {
+      "source_id": "stg_customers",
+      "target_id": "stg_customers.country_code",
+      "edge_type": "HAS_COLUMN",
+      "transformation": "",
+      "confidence": 1.0,
+      "metadata": {}
+    },
+    {
+      "source_id": "stg_customers",
+      "target_id": "stg_customers.created_at",
+      "edge_type": "HAS_COLUMN",
+      "transformation": "",
+      "confidence": 1.0,
+      "metadata": {}
+    },
+    {
+      "source_id": "stg_customers",
+      "target_id": "stg_customers.updated_at",
+      "edge_type": "HAS_COLUMN",
+      "transformation": "",
+      "confidence": 1.0,
+      "metadata": {}
+    },
+    {
+      "source_id": "stg_accounts",
+      "target_id": "sample_repo\\sql\\01_staging_tables.sql",
+      "edge_type": "DEFINED_IN",
+      "transformation": "",
+      "confidence": 1.0,
+      "metadata": {}
+    },
+    {
+      "source_id": "stg_accounts",
+      "target_id": "stg_accounts.account_id",
+      "edge_type": "HAS_COLUMN",
+      "transformation": "",
+      "confidence": 1.0,
+      "metadata": {}
+    },
+    {
+      "source_id": "stg_accounts",
+      "target_id": "stg_accounts.customer_id",
+      "edge_type": "HAS_COLUMN",
+      "transformation": "",
+      "confidence": 1.0,
+      "metadata": {}
+    },
+    {
+      "source_id": "stg_accounts",
+      "target_id": "stg_accounts.account_type",
+      "edge_type": "HAS_COLUMN",
+      "transformation": "",
+      "confidence": 1.0,
+      "metadata": {}
+    },
+    {
+      "source_id": "stg_accounts",
+      "target_id": "stg_accounts.currency",
+      "edge_type": "HAS_COLUMN",
+      "transformation": "",
+      "confidence": 1.0,
+      "metadata": {}
+    },
+    {
+      "source_id": "stg_accounts",
+      "target_id": "stg_accounts.opened_date",
+      "edge_type": "HAS_COLUMN",
+      "transformation": "",
+      "confidence": 1.0,
+      "metadata": {}
+    },
+    {
+      "source_id": "stg_accounts",
+      "target_id": "stg_accounts.status",
+      "edge_type": "HAS_COLUMN",
+      "transformation": "",
+      "confidence": 1.0,
+      "metadata": {}
+    },
+    {
+      "source_id": "stg_accounts",
+      "target_id": "stg_accounts.branch_id",
+      "edge_type": "HAS_COLUMN",
+      "transformation": "",
+      "confidence": 1.0,
+      "metadata": {}
+    },
+    {
+      "source_id": "stg_transactions",
+      "target_id": "sample_repo\\sql\\01_staging_tables.sql",
+      "edge_type": "DEFINED_IN",
+      "transformation": "",
+      "confidence": 1.0,
+      "metadata": {}
+    },
+    {
+      "source_id": "stg_transactions",
+      "target_id": "stg_transactions.transaction_id",
+      "edge_type": "HAS_COLUMN",
+      "transformation": "",
+      "confidence": 1.0,
+      "metadata": {}
+    },
+    {
+      "source_id": "stg_transactions",
+      "target_id": "stg_transactions.account_id",
+      "edge_type": "HAS_COLUMN",
+      "transformation": "",
+      "confidence": 1.0,
+      "metadata": {}
+    },
+    {
+      "source_id": "stg_transactions",
+      "target_id": "stg_transactions.transaction_date",
+      "edge_type": "HAS_COLUMN",
+      "transformation": "",
+      "confidence": 1.0,
+      "metadata": {}
+    },
+    {
+      "source_id": "stg_transactions",
+      "target_id": "stg_transactions.amount",
+      "edge_type": "HAS_COLUMN",
+      "transformation": "",
+      "confidence": 1.0,
+      "metadata": {}
+    },
+    {
+      "source_id": "stg_transactions",
+      "target_id": "stg_transactions.currency",
+      "edge_type": "HAS_COLUMN",
+      "transformation": "",
+      "confidence": 1.0,
+      "metadata": {}
+    },
+    {
+      "source_id": "stg_transactions",
+      "target_id": "stg_transactions.transaction_type",
+      "edge_type": "HAS_COLUMN",
+      "transformation": "",
+      "confidence": 1.0,
+      "metadata": {}
+    },
+    {
+      "source_id": "stg_transactions",
+      "target_id": "stg_transactions.description",
+      "edge_type": "HAS_COLUMN",
+      "transformation": "",
+      "confidence": 1.0,
+      "metadata": {}
+    },
+    {
+      "source_id": "stg_transactions",
+      "target_id": "stg_transactions.counterparty_id",
+      "edge_type": "HAS_COLUMN",
+      "transformation": "",
+      "confidence": 1.0,
+      "metadata": {}
+    },
+    {
+      "source_id": "stg_exchange_rates",
+      "target_id": "sample_repo\\sql\\01_staging_tables.sql",
+      "edge_type": "DEFINED_IN",
+      "transformation": "",
+      "confidence": 1.0,
+      "metadata": {}
+    },
+    {
+      "source_id": "stg_exchange_rates",
+      "target_id": "stg_exchange_rates.rate_date",
+      "edge_type": "HAS_COLUMN",
+      "transformation": "",
+      "confidence": 1.0,
+      "metadata": {}
+    },
+    {
+      "source_id": "stg_exchange_rates",
+      "target_id": "stg_exchange_rates.from_currency",
+      "edge_type": "HAS_COLUMN",
+      "transformation": "",
+      "confidence": 1.0,
+      "metadata": {}
+    },
+    {
+      "source_id": "stg_exchange_rates",
+      "target_id": "stg_exchange_rates.to_currency",
+      "edge_type": "HAS_COLUMN",
+      "transformation": "",
+      "confidence": 1.0,
+      "metadata": {}
+    },
+    {
+      "source_id": "stg_exchange_rates",
+      "target_id": "stg_exchange_rates.rate",
+      "edge_type": "HAS_COLUMN",
+      "transformation": "",
+      "confidence": 1.0,
+      "metadata": {}
+    },
+    {
+      "source_id": "stg_branches",
+      "target_id": "sample_repo\\sql\\01_staging_tables.sql",
+      "edge_type": "DEFINED_IN",
+      "transformation": "",
+      "confidence": 1.0,
+      "metadata": {}
+    },
+    {
+      "source_id": "stg_branches",
+      "target_id": "stg_branches.branch_id",
+      "edge_type": "HAS_COLUMN",
+      "transformation": "",
+      "confidence": 1.0,
+      "metadata": {}
+    },
+    {
+      "source_id": "stg_branches",
+      "target_id": "stg_branches.branch_name",
+      "edge_type": "HAS_COLUMN",
+      "transformation": "",
+      "confidence": 1.0,
+      "metadata": {}
+    },
+    {
+      "source_id": "stg_branches",
+      "target_id": "stg_branches.region",
+      "edge_type": "HAS_COLUMN",
+      "transformation": "",
+      "confidence": 1.0,
+      "metadata": {}
+    },
+    {
+      "source_id": "stg_branches",
+      "target_id": "stg_branches.country_code",
+      "edge_type": "HAS_COLUMN",
+      "transformation": "",
+      "confidence": 1.0,
+      "metadata": {}
+    },
+    {
+      "source_id": "int_customers",
+      "target_id": "sample_repo\\sql\\02_intermediate_views.sql",
+      "edge_type": "DEFINED_IN",
+      "transformation": "",
+      "confidence": 1.0,
+      "metadata": {}
+    },
+    {
+      "source_id": "int_customers",
+      "target_id": "stg_customers",
+      "edge_type": "READS_FROM",
+      "transformation": "",
+      "confidence": 1.0,
+      "metadata": {}
+    },
+    {
+      "source_id": "int_customers",
+      "target_id": "stg_accounts",
+      "edge_type": "READS_FROM",
+      "transformation": "",
+      "confidence": 1.0,
+      "metadata": {}
+    },
+    {
+      "source_id": "int_customers",
+      "target_id": "stg_branches",
+      "edge_type": "READS_FROM",
+      "transformation": "",
+      "confidence": 1.0,
+      "metadata": {}
+    },
+    {
+      "source_id": "int_customers.customer_id",
+      "target_id": "stg_customers.customer_id",
+      "edge_type": "DERIVES_FROM",
+      "transformation": "",
+      "confidence": 1.0,
+      "metadata": {}
+    },
+    {
+      "source_id": "int_customers.full_name",
+      "target_id": "stg_customers.first_name",
+      "edge_type": "DERIVES_FROM",
+      "transformation": "CONCAT(c.first_name, ' ', c.last_name)",
+      "confidence": 1.0,
+      "metadata": {}
+    },
+    {
+      "source_id": "int_customers.full_name",
+      "target_id": "stg_customers.last_name",
+      "edge_type": "DERIVES_FROM",
+      "transformation": "CONCAT(c.first_name, ' ', c.last_name)",
+      "confidence": 1.0,
+      "metadata": {}
+    },
+    {
+      "source_id": "int_customers",
+      "target_id": "int_customers.email",
+      "edge_type": "HAS_COLUMN",
+      "transformation": "",
+      "confidence": 1.0,
+      "metadata": {}
+    },
+    {
+      "source_id": "int_customers.email",
+      "target_id": "stg_customers.email",
+      "edge_type": "DERIVES_FROM",
+      "transformation": "",
+      "confidence": 1.0,
+      "metadata": {}
+    },
+    {
+      "source_id": "int_customers",
+      "target_id": "int_customers.country_code",
+      "edge_type": "HAS_COLUMN",
+      "transformation": "",
+      "confidence": 1.0,
+      "metadata": {}
+    },
+    {
+      "source_id": "int_customers.country_code",
+      "target_id": "stg_customers.country_code",
+      "edge_type": "DERIVES_FROM",
+      "transformation": "",
+      "confidence": 1.0,
+      "metadata": {}
+    },
+    {
+      "source_id": "int_customers.customer_region",
+      "target_id": "stg_branches.region",
+      "edge_type": "DERIVES_FROM",
+      "transformation": "",
+      "confidence": 1.0,
+      "metadata": {}
+    },
+    {
+      "source_id": "int_customers.account_id",
+      "target_id": "stg_accounts.account_id",
+      "edge_type": "DERIVES_FROM",
+      "transformation": "",
+      "confidence": 1.0,
+      "metadata": {}
+    },
+    {
+      "source_id": "int_customers.account_type",
+      "target_id": "stg_accounts.account_type",
+      "edge_type": "DERIVES_FROM",
+      "transformation": "",
+      "confidence": 1.0,
+      "metadata": {}
+    },
+    {
+      "source_id": "int_customers",
+      "target_id": "int_customers.account_currency",
+      "edge_type": "HAS_COLUMN",
+      "transformation": "",
+      "confidence": 1.0,
+      "metadata": {}
+    },
+    {
+      "source_id": "int_customers.account_currency",
+      "target_id": "stg_accounts.currency",
+      "edge_type": "DERIVES_FROM",
+      "transformation": "",
+      "confidence": 1.0,
+      "metadata": {}
+    },
+    {
+      "source_id": "int_customers",
+      "target_id": "int_customers.account_status",
+      "edge_type": "HAS_COLUMN",
+      "transformation": "",
+      "confidence": 1.0,
+      "metadata": {}
+    },
+    {
+      "source_id": "int_customers.account_status",
+      "target_id": "stg_accounts.status",
+      "edge_type": "DERIVES_FROM",
+      "transformation": "",
+      "confidence": 1.0,
+      "metadata": {}
+    },
+    {
+      "source_id": "int_daily_balances",
+      "target_id": "sample_repo\\sql\\02_intermediate_views.sql",
+      "edge_type": "DEFINED_IN",
+      "transformation": "",
+      "confidence": 1.0,
+      "metadata": {}
+    },
+    {
+      "source_id": "int_daily_balances",
+      "target_id": "stg_transactions",
+      "edge_type": "READS_FROM",
+      "transformation": "",
+      "confidence": 1.0,
+      "metadata": {}
+    },
+    {
+      "source_id": "int_daily_balances",
+      "target_id": "stg_exchange_rates",
+      "edge_type": "READS_FROM",
+      "transformation": "",
+      "confidence": 1.0,
+      "metadata": {}
+    },
+    {
+      "source_id": "int_daily_balances",
+      "target_id": "int_daily_balances.account_id",
+      "edge_type": "HAS_COLUMN",
+      "transformation": "",
+      "confidence": 1.0,
+      "metadata": {}
+    },
+    {
+      "source_id": "int_daily_balances.account_id",
+      "target_id": "stg_transactions.account_id",
+      "edge_type": "DERIVES_FROM",
+      "transformation": "",
+      "confidence": 1.0,
+      "metadata": {}
+    },
+    {
+      "source_id": "int_daily_balances",
+      "target_id": "int_daily_balances.balance_date",
+      "edge_type": "HAS_COLUMN",
+      "transformation": "",
+      "confidence": 1.0,
+      "metadata": {}
+    },
+    {
+      "source_id": "int_daily_balances.balance_date",
+      "target_id": "stg_transactions.transaction_date",
+      "edge_type": "DERIVES_FROM",
+      "transformation": "CAST(t.transaction_date AS DATE)",
+      "confidence": 1.0,
+      "metadata": {}
+    },
+    {
+      "source_id": "int_daily_balances",
+      "target_id": "int_daily_balances.original_currency",
+      "edge_type": "HAS_COLUMN",
+      "transformation": "",
+      "confidence": 1.0,
+      "metadata": {}
+    },
+    {
+      "source_id": "int_daily_balances.original_currency",
+      "target_id": "stg_transactions.currency",
+      "edge_type": "DERIVES_FROM",
+      "transformation": "",
+      "confidence": 1.0,
+      "metadata": {}
+    },
+    {
+      "source_id": "int_daily_balances.daily_net_amount",
+      "target_id": "stg_transactions.amount",
+      "edge_type": "DERIVES_FROM",
+      "transformation": "SUM(CASE WHEN t.transaction_type = 'CREDIT' THEN t.amount WHEN t.transaction_type = 'DEBIT' THEN -t.amount ELSE 0 END)",
+      "confidence": 1.0,
+      "metadata": {}
+    },
+    {
+      "source_id": "int_daily_balances.daily_net_amount",
+      "target_id": "stg_transactions.transaction_type",
+      "edge_type": "DERIVES_FROM",
+      "transformation": "SUM(CASE WHEN t.transaction_type = 'CREDIT' THEN t.amount WHEN t.transaction_type = 'DEBIT' THEN -t.amount ELSE 0 END)",
+      "confidence": 1.0,
+      "metadata": {}
+    },
+    {
+      "source_id": "int_daily_balances.daily_net_amount_usd",
+      "target_id": "stg_transactions.transaction_type",
+      "edge_type": "DERIVES_FROM",
+      "transformation": "SUM(CASE WHEN t.transaction_type = 'CREDIT' THEN t.amount * er.rate WHEN t.transaction_type = 'DEBIT' THEN -t.amount * er.rate ELSE 0 END)",
+      "confidence": 1.0,
+      "metadata": {}
+    },
+    {
+      "source_id": "int_daily_balances.daily_net_amount_usd",
+      "target_id": "stg_transactions.amount",
+      "edge_type": "DERIVES_FROM",
+      "transformation": "SUM(CASE WHEN t.transaction_type = 'CREDIT' THEN t.amount * er.rate WHEN t.transaction_type = 'DEBIT' THEN -t.amount * er.rate ELSE 0 END)",
+      "confidence": 1.0,
+      "metadata": {}
+    },
+    {
+      "source_id": "int_daily_balances.daily_net_amount_usd",
+      "target_id": "stg_exchange_rates.rate",
+      "edge_type": "DERIVES_FROM",
+      "transformation": "SUM(CASE WHEN t.transaction_type = 'CREDIT' THEN t.amount * er.rate WHEN t.transaction_type = 'DEBIT' THEN -t.amount * er.rate ELSE 0 END)",
+      "confidence": 1.0,
+      "metadata": {}
+    },
+    {
+      "source_id": "int_transaction_risk",
+      "target_id": "sample_repo\\sql\\02_intermediate_views.sql",
+      "edge_type": "DEFINED_IN",
+      "transformation": "",
+      "confidence": 1.0,
+      "metadata": {}
+    },
+    {
+      "source_id": "int_transaction_risk",
+      "target_id": "stg_transactions",
+      "edge_type": "READS_FROM",
+      "transformation": "",
+      "confidence": 1.0,
+      "metadata": {}
+    },
+    {
+      "source_id": "int_transaction_risk.transaction_id",
+      "target_id": "stg_transactions.transaction_id",
+      "edge_type": "DERIVES_FROM",
+      "transformation": "",
+      "confidence": 1.0,
+      "metadata": {}
+    },
+    {
+      "source_id": "int_transaction_risk",
+      "target_id": "int_transaction_risk.account_id",
+      "edge_type": "HAS_COLUMN",
+      "transformation": "",
+      "confidence": 1.0,
+      "metadata": {}
+    },
+    {
+      "source_id": "int_transaction_risk.account_id",
+      "target_id": "stg_transactions.account_id",
+      "edge_type": "DERIVES_FROM",
+      "transformation": "",
+      "confidence": 1.0,
+      "metadata": {}
+    },
+    {
+      "source_id": "int_transaction_risk",
+      "target_id": "int_transaction_risk.amount",
+      "edge_type": "HAS_COLUMN",
+      "transformation": "",
+      "confidence": 1.0,
+      "metadata": {}
+    },
+    {
+      "source_id": "int_transaction_risk.amount",
+      "target_id": "stg_transactions.amount",
+      "edge_type": "DERIVES_FROM",
+      "transformation": "",
+      "confidence": 1.0,
+      "metadata": {}
+    },
+    {
+      "source_id": "int_transaction_risk",
+      "target_id": "int_transaction_risk.currency",
+      "edge_type": "HAS_COLUMN",
+      "transformation": "",
+      "confidence": 1.0,
+      "metadata": {}
+    },
+    {
+      "source_id": "int_transaction_risk.currency",
+      "target_id": "stg_transactions.currency",
+      "edge_type": "DERIVES_FROM",
+      "transformation": "",
+      "confidence": 1.0,
+      "metadata": {}
+    },
+    {
+      "source_id": "int_transaction_risk",
+      "target_id": "int_transaction_risk.transaction_date",
+      "edge_type": "HAS_COLUMN",
+      "transformation": "",
+      "confidence": 1.0,
+      "metadata": {}
+    },
+    {
+      "source_id": "int_transaction_risk.transaction_date",
+      "target_id": "stg_transactions.transaction_date",
+      "edge_type": "DERIVES_FROM",
+      "transformation": "",
+      "confidence": 1.0,
+      "metadata": {}
+    },
+    {
+      "source_id": "int_transaction_risk",
+      "target_id": "int_transaction_risk.transaction_type",
+      "edge_type": "HAS_COLUMN",
+      "transformation": "",
+      "confidence": 1.0,
+      "metadata": {}
+    },
+    {
+      "source_id": "int_transaction_risk.transaction_type",
+      "target_id": "stg_transactions.transaction_type",
+      "edge_type": "DERIVES_FROM",
+      "transformation": "",
+      "confidence": 1.0,
+      "metadata": {}
+    },
+    {
+      "source_id": "int_transaction_risk",
+      "target_id": "int_transaction_risk.counterparty_id",
+      "edge_type": "HAS_COLUMN",
+      "transformation": "",
+      "confidence": 1.0,
+      "metadata": {}
+    },
+    {
+      "source_id": "int_transaction_risk.counterparty_id",
+      "target_id": "stg_transactions.counterparty_id",
+      "edge_type": "DERIVES_FROM",
+      "transformation": "",
+      "confidence": 1.0,
+      "metadata": {}
+    },
+    {
+      "source_id": "int_transaction_risk.risk_level",
+      "target_id": "stg_transactions.amount",
+      "edge_type": "DERIVES_FROM",
+      "transformation": "CASE WHEN t.amount > 50000 THEN 'HIGH' WHEN t.amount > 10000 THEN 'MEDIUM' ELSE 'LOW' END",
+      "confidence": 1.0,
+      "metadata": {}
+    },
+    {
+      "source_id": "int_transaction_risk.is_anonymous",
+      "target_id": "stg_transactions.counterparty_id",
+      "edge_type": "DERIVES_FROM",
+      "transformation": "CASE WHEN t.counterparty_id IS NULL THEN TRUE ELSE FALSE END",
+      "confidence": 1.0,
+      "metadata": {}
+    },
+    {
+      "source_id": "rpt_customer_exposure",
+      "target_id": "sample_repo\\sql\\03_reporting_tables.sql",
+      "edge_type": "DEFINED_IN",
+      "transformation": "",
+      "confidence": 1.0,
+      "metadata": {}
+    },
+    {
+      "source_id": "rpt_customer_exposure",
+      "target_id": "int_customers",
+      "edge_type": "READS_FROM",
+      "transformation": "",
+      "confidence": 1.0,
+      "metadata": {}
+    },
+    {
+      "source_id": "rpt_customer_exposure",
+      "target_id": "int_daily_balances",
+      "edge_type": "READS_FROM",
+      "transformation": "",
+      "confidence": 1.0,
+      "metadata": {}
+    },
+    {
+      "source_id": "rpt_customer_exposure",
+      "target_id": "int_transaction_risk",
+      "edge_type": "READS_FROM",
+      "transformation": "",
+      "confidence": 1.0,
+      "metadata": {}
+    },
+    {
+      "source_id": "rpt_customer_exposure",
+      "target_id": "int_python_customer_scores",
+      "edge_type": "READS_FROM",
+      "transformation": "",
+      "confidence": 1.0,
+      "metadata": {}
+    },
+    {
+      "source_id": "rpt_customer_exposure",
+      "target_id": "rpt_customer_exposure.customer_id",
+      "edge_type": "HAS_COLUMN",
+      "transformation": "",
+      "confidence": 1.0,
+      "metadata": {}
+    },
+    {
+      "source_id": "rpt_customer_exposure.customer_id",
+      "target_id": "int_customers.customer_id",
+      "edge_type": "DERIVES_FROM",
+      "transformation": "",
+      "confidence": 1.0,
+      "metadata": {}
+    },
+    {
+      "source_id": "rpt_customer_exposure",
+      "target_id": "rpt_customer_exposure.full_name",
+      "edge_type": "HAS_COLUMN",
+      "transformation": "",
+      "confidence": 1.0,
+      "metadata": {}
+    },
+    {
+      "source_id": "rpt_customer_exposure.full_name",
+      "target_id": "int_customers.full_name",
+      "edge_type": "DERIVES_FROM",
+      "transformation": "",
+      "confidence": 1.0,
+      "metadata": {}
+    },
+    {
+      "source_id": "rpt_customer_exposure",
+      "target_id": "rpt_customer_exposure.customer_region",
+      "edge_type": "HAS_COLUMN",
+      "transformation": "",
+      "confidence": 1.0,
+      "metadata": {}
+    },
+    {
+      "source_id": "rpt_customer_exposure.customer_region",
+      "target_id": "int_customers.customer_region",
+      "edge_type": "DERIVES_FROM",
+      "transformation": "",
+      "confidence": 1.0,
+      "metadata": {}
+    },
+    {
+      "source_id": "rpt_customer_exposure",
+      "target_id": "rpt_customer_exposure.account_id",
+      "edge_type": "HAS_COLUMN",
+      "transformation": "",
+      "confidence": 1.0,
+      "metadata": {}
+    },
+    {
+      "source_id": "rpt_customer_exposure.account_id",
+      "target_id": "int_customers.account_id",
+      "edge_type": "DERIVES_FROM",
+      "transformation": "",
+      "confidence": 1.0,
+      "metadata": {}
+    },
+    {
+      "source_id": "rpt_customer_exposure",
+      "target_id": "rpt_customer_exposure.account_type",
+      "edge_type": "HAS_COLUMN",
+      "transformation": "",
+      "confidence": 1.0,
+      "metadata": {}
+    },
+    {
+      "source_id": "rpt_customer_exposure.account_type",
+      "target_id": "int_customers.account_type",
+      "edge_type": "DERIVES_FROM",
+      "transformation": "",
+      "confidence": 1.0,
+      "metadata": {}
+    },
+    {
+      "source_id": "rpt_customer_exposure",
+      "target_id": "rpt_customer_exposure.account_currency",
+      "edge_type": "HAS_COLUMN",
+      "transformation": "",
+      "confidence": 1.0,
+      "metadata": {}
+    },
+    {
+      "source_id": "rpt_customer_exposure.account_currency",
+      "target_id": "int_customers.account_currency",
+      "edge_type": "DERIVES_FROM",
+      "transformation": "",
+      "confidence": 1.0,
+      "metadata": {}
+    },
+    {
+      "source_id": "rpt_customer_exposure",
+      "target_id": "rpt_customer_exposure.balance_date",
+      "edge_type": "HAS_COLUMN",
+      "transformation": "",
+      "confidence": 1.0,
+      "metadata": {}
+    },
+    {
+      "source_id": "rpt_customer_exposure.balance_date",
+      "target_id": "int_daily_balances.balance_date",
+      "edge_type": "DERIVES_FROM",
+      "transformation": "",
+      "confidence": 1.0,
+      "metadata": {}
+    },
+    {
+      "source_id": "rpt_customer_exposure",
+      "target_id": "rpt_customer_exposure.daily_net_amount",
+      "edge_type": "HAS_COLUMN",
+      "transformation": "",
+      "confidence": 1.0,
+      "metadata": {}
+    },
+    {
+      "source_id": "rpt_customer_exposure.daily_net_amount",
+      "target_id": "int_daily_balances.daily_net_amount",
+      "edge_type": "DERIVES_FROM",
+      "transformation": "",
+      "confidence": 1.0,
+      "metadata": {}
+    },
+    {
+      "source_id": "rpt_customer_exposure",
+      "target_id": "rpt_customer_exposure.daily_net_amount_usd",
+      "edge_type": "HAS_COLUMN",
+      "transformation": "",
+      "confidence": 1.0,
+      "metadata": {}
+    },
+    {
+      "source_id": "rpt_customer_exposure.daily_net_amount_usd",
+      "target_id": "int_daily_balances.daily_net_amount_usd",
+      "edge_type": "DERIVES_FROM",
+      "transformation": "",
+      "confidence": 1.0,
+      "metadata": {}
+    },
+    {
+      "source_id": "rpt_customer_exposure",
+      "target_id": "rpt_customer_exposure.risk_level",
+      "edge_type": "HAS_COLUMN",
+      "transformation": "",
+      "confidence": 1.0,
+      "metadata": {}
+    },
+    {
+      "source_id": "rpt_customer_exposure.risk_level",
+      "target_id": "int_transaction_risk.risk_level",
+      "edge_type": "DERIVES_FROM",
+      "transformation": "",
+      "confidence": 1.0,
+      "metadata": {}
+    },
+    {
+      "source_id": "rpt_customer_exposure",
+      "target_id": "rpt_customer_exposure.is_anonymous",
+      "edge_type": "HAS_COLUMN",
+      "transformation": "",
+      "confidence": 1.0,
+      "metadata": {}
+    },
+    {
+      "source_id": "rpt_customer_exposure.is_anonymous",
+      "target_id": "int_transaction_risk.is_anonymous",
+      "edge_type": "DERIVES_FROM",
+      "transformation": "",
+      "confidence": 1.0,
+      "metadata": {}
+    },
+    {
+      "source_id": "rpt_customer_exposure",
+      "target_id": "rpt_customer_exposure.python_risk_score",
+      "edge_type": "HAS_COLUMN",
+      "transformation": "",
+      "confidence": 1.0,
+      "metadata": {}
+    },
+    {
+      "source_id": "rpt_customer_exposure.python_risk_score",
+      "target_id": "int_python_customer_scores.risk_score",
+      "edge_type": "DERIVES_FROM",
+      "transformation": "",
+      "confidence": 1.0,
+      "metadata": {}
+    },
+    {
+      "source_id": "rpt_customer_exposure",
+      "target_id": "rpt_customer_exposure.python_risk_segment",
+      "edge_type": "HAS_COLUMN",
+      "transformation": "",
+      "confidence": 1.0,
+      "metadata": {}
+    },
+    {
+      "source_id": "rpt_customer_exposure.python_risk_segment",
+      "target_id": "int_python_customer_scores.segment",
+      "edge_type": "DERIVES_FROM",
+      "transformation": "",
+      "confidence": 1.0,
+      "metadata": {}
+    },
+    {
+      "source_id": "rpt_customer_exposure",
+      "target_id": "rpt_customer_exposure.cumulative_exposure_usd",
+      "edge_type": "HAS_COLUMN",
+      "transformation": "",
+      "confidence": 1.0,
+      "metadata": {}
+    },
+    {
+      "source_id": "rpt_customer_exposure.cumulative_exposure_usd",
+      "target_id": "int_customers.customer_id",
+      "edge_type": "DERIVES_FROM",
+      "transformation": "SUM(db.daily_net_amount_usd) OVER (PARTITION BY ic.customer_id ORDER BY db.balance_date)",
+      "confidence": 1.0,
+      "metadata": {}
+    },
+    {
+      "source_id": "rpt_customer_exposure.cumulative_exposure_usd",
+      "target_id": "int_daily_balances.daily_net_amount_usd",
+      "edge_type": "DERIVES_FROM",
+      "transformation": "SUM(db.daily_net_amount_usd) OVER (PARTITION BY ic.customer_id ORDER BY db.balance_date)",
+      "confidence": 1.0,
+      "metadata": {}
+    },
+    {
+      "source_id": "rpt_customer_exposure.cumulative_exposure_usd",
+      "target_id": "int_daily_balances.balance_date",
+      "edge_type": "DERIVES_FROM",
+      "transformation": "SUM(db.daily_net_amount_usd) OVER (PARTITION BY ic.customer_id ORDER BY db.balance_date)",
+      "confidence": 1.0,
+      "metadata": {}
+    },
+    {
+      "source_id": "rpt_regional_risk_summary",
+      "target_id": "sample_repo\\sql\\03_reporting_tables.sql",
+      "edge_type": "DEFINED_IN",
+      "transformation": "",
+      "confidence": 1.0,
+      "metadata": {}
+    },
+    {
+      "source_id": "rpt_regional_risk_summary",
+      "target_id": "int_customers",
+      "edge_type": "READS_FROM",
+      "transformation": "",
+      "confidence": 1.0,
+      "metadata": {}
+    },
+    {
+      "source_id": "rpt_regional_risk_summary",
+      "target_id": "int_transaction_risk",
+      "edge_type": "READS_FROM",
+      "transformation": "",
+      "confidence": 1.0,
+      "metadata": {}
+    },
+    {
+      "source_id": "rpt_regional_risk_summary",
+      "target_id": "int_python_customer_scores",
+      "edge_type": "READS_FROM",
+      "transformation": "",
+      "confidence": 1.0,
+      "metadata": {}
+    },
+    {
+      "source_id": "rpt_regional_risk_summary",
+      "target_id": "rpt_regional_risk_summary.customer_region",
+      "edge_type": "HAS_COLUMN",
+      "transformation": "",
+      "confidence": 1.0,
+      "metadata": {}
+    },
+    {
+      "source_id": "rpt_regional_risk_summary.customer_region",
+      "target_id": "int_customers.customer_region",
+      "edge_type": "DERIVES_FROM",
+      "transformation": "",
+      "confidence": 1.0,
+      "metadata": {}
+    },
+    {
+      "source_id": "rpt_regional_risk_summary",
+      "target_id": "rpt_regional_risk_summary.risk_level",
+      "edge_type": "HAS_COLUMN",
+      "transformation": "",
+      "confidence": 1.0,
+      "metadata": {}
+    },
+    {
+      "source_id": "rpt_regional_risk_summary.risk_level",
+      "target_id": "int_transaction_risk.risk_level",
+      "edge_type": "DERIVES_FROM",
+      "transformation": "",
+      "confidence": 1.0,
+      "metadata": {}
+    },
+    {
+      "source_id": "rpt_regional_risk_summary",
+      "target_id": "rpt_regional_risk_summary.python_risk_segment",
+      "edge_type": "HAS_COLUMN",
+      "transformation": "",
+      "confidence": 1.0,
+      "metadata": {}
+    },
+    {
+      "source_id": "rpt_regional_risk_summary.python_risk_segment",
+      "target_id": "int_python_customer_scores.segment",
+      "edge_type": "DERIVES_FROM",
+      "transformation": "",
+      "confidence": 1.0,
+      "metadata": {}
+    },
+    {
+      "source_id": "rpt_regional_risk_summary",
+      "target_id": "rpt_regional_risk_summary.transaction_count",
+      "edge_type": "HAS_COLUMN",
+      "transformation": "",
+      "confidence": 1.0,
+      "metadata": {}
+    },
+    {
+      "source_id": "rpt_regional_risk_summary.transaction_count",
+      "target_id": "int_transaction_risk.transaction_id",
+      "edge_type": "DERIVES_FROM",
+      "transformation": "COUNT(DISTINCT tr.transaction_id)",
+      "confidence": 1.0,
+      "metadata": {}
+    },
+    {
+      "source_id": "rpt_regional_risk_summary",
+      "target_id": "rpt_regional_risk_summary.total_amount",
+      "edge_type": "HAS_COLUMN",
+      "transformation": "",
+      "confidence": 1.0,
+      "metadata": {}
+    },
+    {
+      "source_id": "rpt_regional_risk_summary.total_amount",
+      "target_id": "int_transaction_risk.amount",
+      "edge_type": "DERIVES_FROM",
+      "transformation": "SUM(tr.amount)",
+      "confidence": 1.0,
+      "metadata": {}
+    },
+    {
+      "source_id": "rpt_regional_risk_summary",
+      "target_id": "rpt_regional_risk_summary.customer_count",
+      "edge_type": "HAS_COLUMN",
+      "transformation": "",
+      "confidence": 1.0,
+      "metadata": {}
+    },
+    {
+      "source_id": "rpt_regional_risk_summary.customer_count",
+      "target_id": "int_customers.customer_id",
+      "edge_type": "DERIVES_FROM",
+      "transformation": "COUNT(DISTINCT ic.customer_id)",
+      "confidence": 1.0,
+      "metadata": {}
+    },
+    {
+      "source_id": "rpt_regional_risk_summary",
+      "target_id": "rpt_regional_risk_summary.avg_python_risk_score",
+      "edge_type": "HAS_COLUMN",
+      "transformation": "",
+      "confidence": 1.0,
+      "metadata": {}
+    },
+    {
+      "source_id": "rpt_regional_risk_summary.avg_python_risk_score",
+      "target_id": "int_python_customer_scores.risk_score",
+      "edge_type": "DERIVES_FROM",
+      "transformation": "AVG(ps.risk_score)",
+      "confidence": 1.0,
+      "metadata": {}
+    },
+    {
+      "source_id": "rpt_customer_scorecard",
+      "target_id": "sample_repo\\sql\\03_reporting_tables.sql",
+      "edge_type": "DEFINED_IN",
+      "transformation": "",
+      "confidence": 1.0,
+      "metadata": {}
+    },
+    {
+      "source_id": "rpt_customer_scorecard",
+      "target_id": "int_python_customer_scores",
+      "edge_type": "READS_FROM",
+      "transformation": "",
+      "confidence": 1.0,
+      "metadata": {}
+    },
+    {
+      "source_id": "rpt_customer_scorecard",
+      "target_id": "int_customers",
+      "edge_type": "READS_FROM",
+      "transformation": "",
+      "confidence": 1.0,
+      "metadata": {}
+    },
+    {
+      "source_id": "rpt_customer_scorecard",
+      "target_id": "rpt_customer_scorecard.customer_id",
+      "edge_type": "HAS_COLUMN",
+      "transformation": "",
+      "confidence": 1.0,
+      "metadata": {}
+    },
+    {
+      "source_id": "rpt_customer_scorecard.customer_id",
+      "target_id": "int_python_customer_scores.customer_id",
+      "edge_type": "DERIVES_FROM",
+      "transformation": "",
+      "confidence": 1.0,
+      "metadata": {}
+    },
+    {
+      "source_id": "rpt_customer_scorecard",
+      "target_id": "rpt_customer_scorecard.full_name",
+      "edge_type": "HAS_COLUMN",
+      "transformation": "",
+      "confidence": 1.0,
+      "metadata": {}
+    },
+    {
+      "source_id": "rpt_customer_scorecard.full_name",
+      "target_id": "int_python_customer_scores.full_name",
+      "edge_type": "DERIVES_FROM",
+      "transformation": "",
+      "confidence": 1.0,
+      "metadata": {}
+    },
+    {
+      "source_id": "rpt_customer_scorecard",
+      "target_id": "rpt_customer_scorecard.customer_region",
+      "edge_type": "HAS_COLUMN",
+      "transformation": "",
+      "confidence": 1.0,
+      "metadata": {}
+    },
+    {
+      "source_id": "rpt_customer_scorecard.customer_region",
+      "target_id": "int_python_customer_scores.customer_region",
+      "edge_type": "DERIVES_FROM",
+      "transformation": "",
+      "confidence": 1.0,
+      "metadata": {}
+    },
+    {
+      "source_id": "rpt_customer_scorecard",
+      "target_id": "rpt_customer_scorecard.account_id",
+      "edge_type": "HAS_COLUMN",
+      "transformation": "",
+      "confidence": 1.0,
+      "metadata": {}
+    },
+    {
+      "source_id": "rpt_customer_scorecard.account_id",
+      "target_id": "int_python_customer_scores.account_id",
+      "edge_type": "DERIVES_FROM",
+      "transformation": "",
+      "confidence": 1.0,
+      "metadata": {}
+    },
+    {
+      "source_id": "rpt_customer_scorecard",
+      "target_id": "rpt_customer_scorecard.account_type",
+      "edge_type": "HAS_COLUMN",
+      "transformation": "",
+      "confidence": 1.0,
+      "metadata": {}
+    },
+    {
+      "source_id": "rpt_customer_scorecard.account_type",
+      "target_id": "int_python_customer_scores.account_type",
+      "edge_type": "DERIVES_FROM",
+      "transformation": "",
+      "confidence": 1.0,
+      "metadata": {}
+    },
+    {
+      "source_id": "rpt_customer_scorecard",
+      "target_id": "rpt_customer_scorecard.total_net_usd",
+      "edge_type": "HAS_COLUMN",
+      "transformation": "",
+      "confidence": 1.0,
+      "metadata": {}
+    },
+    {
+      "source_id": "rpt_customer_scorecard.total_net_usd",
+      "target_id": "int_python_customer_scores.total_net_usd",
+      "edge_type": "DERIVES_FROM",
+      "transformation": "",
+      "confidence": 1.0,
+      "metadata": {}
+    },
+    {
+      "source_id": "rpt_customer_scorecard",
+      "target_id": "rpt_customer_scorecard.balance_volatility_usd",
+      "edge_type": "HAS_COLUMN",
+      "transformation": "",
+      "confidence": 1.0,
+      "metadata": {}
+    },
+    {
+      "source_id": "rpt_customer_scorecard.balance_volatility_usd",
+      "target_id": "int_python_customer_scores.balance_volatility_usd",
+      "edge_type": "DERIVES_FROM",
+      "transformation": "",
+      "confidence": 1.0,
+      "metadata": {}
+    },
+    {
+      "source_id": "rpt_customer_scorecard",
+      "target_id": "rpt_customer_scorecard.high_risk_txn_count",
+      "edge_type": "HAS_COLUMN",
+      "transformation": "",
+      "confidence": 1.0,
+      "metadata": {}
+    },
+    {
+      "source_id": "rpt_customer_scorecard.high_risk_txn_count",
+      "target_id": "int_python_customer_scores.high_risk_txn_count",
+      "edge_type": "DERIVES_FROM",
+      "transformation": "",
+      "confidence": 1.0,
+      "metadata": {}
+    },
+    {
+      "source_id": "rpt_customer_scorecard",
+      "target_id": "rpt_customer_scorecard.anonymous_txn_count",
+      "edge_type": "HAS_COLUMN",
+      "transformation": "",
+      "confidence": 1.0,
+      "metadata": {}
+    },
+    {
+      "source_id": "rpt_customer_scorecard.anonymous_txn_count",
+      "target_id": "int_python_customer_scores.anonymous_txn_count",
+      "edge_type": "DERIVES_FROM",
+      "transformation": "",
+      "confidence": 1.0,
+      "metadata": {}
+    },
+    {
+      "source_id": "rpt_customer_scorecard",
+      "target_id": "rpt_customer_scorecard.risk_score",
+      "edge_type": "HAS_COLUMN",
+      "transformation": "",
+      "confidence": 1.0,
+      "metadata": {}
+    },
+    {
+      "source_id": "rpt_customer_scorecard.risk_score",
+      "target_id": "int_python_customer_scores.risk_score",
+      "edge_type": "DERIVES_FROM",
+      "transformation": "",
+      "confidence": 1.0,
+      "metadata": {}
+    },
+    {
+      "source_id": "rpt_customer_scorecard",
+      "target_id": "rpt_customer_scorecard.segment",
+      "edge_type": "HAS_COLUMN",
+      "transformation": "",
+      "confidence": 1.0,
+      "metadata": {}
+    },
+    {
+      "source_id": "rpt_customer_scorecard.segment",
+      "target_id": "int_python_customer_scores.segment",
+      "edge_type": "DERIVES_FROM",
+      "transformation": "",
+      "confidence": 1.0,
+      "metadata": {}
+    },
+    {
+      "source_id": "rpt_customer_scorecard",
+      "target_id": "rpt_customer_scorecard.account_currency",
+      "edge_type": "HAS_COLUMN",
+      "transformation": "",
+      "confidence": 1.0,
+      "metadata": {}
+    },
+    {
+      "source_id": "rpt_customer_scorecard.account_currency",
+      "target_id": "int_customers.account_currency",
+      "edge_type": "DERIVES_FROM",
+      "transformation": "",
+      "confidence": 1.0,
+      "metadata": {}
+    },
+    {
+      "source_id": "rpt_customer_scorecard",
+      "target_id": "rpt_customer_scorecard.account_status",
+      "edge_type": "HAS_COLUMN",
+      "transformation": "",
+      "confidence": 1.0,
+      "metadata": {}
+    },
+    {
+      "source_id": "rpt_customer_scorecard.account_status",
+      "target_id": "int_customers.account_status",
+      "edge_type": "DERIVES_FROM",
+      "transformation": "",
+      "confidence": 1.0,
+      "metadata": {}
+    },
+    {
+      "source_id": "rpt_monthly_summary",
+      "target_id": "sample_repo\\sql\\04_stored_procedures.sql",
+      "edge_type": "DEFINED_IN",
+      "transformation": "",
+      "confidence": 1.0,
+      "metadata": {}
+    },
+    {
+      "source_id": "int_customers",
+      "target_id": "sample_repo\\sql\\04_stored_procedures.sql",
+      "edge_type": "DEFINED_IN",
+      "transformation": "",
+      "confidence": 1.0,
+      "metadata": {}
+    },
+    {
+      "source_id": "stg_transactions",
+      "target_id": "sample_repo\\sql\\04_stored_procedures.sql",
+      "edge_type": "DEFINED_IN",
+      "transformation": "",
+      "confidence": 1.0,
+      "metadata": {}
+    },
+    {
+      "source_id": "int_daily_balances",
+      "target_id": "sample_repo\\sql\\04_stored_procedures.sql",
+      "edge_type": "DEFINED_IN",
+      "transformation": "",
+      "confidence": 1.0,
+      "metadata": {}
+    },
+    {
+      "source_id": "int_transaction_risk",
+      "target_id": "sample_repo\\sql\\04_stored_procedures.sql",
+      "edge_type": "DEFINED_IN",
+      "transformation": "",
+      "confidence": 1.0,
+      "metadata": {}
+    },
+    {
+      "source_id": "rpt_monthly_summary",
+      "target_id": "rpt_monthly_summary.customer_id",
+      "edge_type": "HAS_COLUMN",
+      "transformation": "",
+      "confidence": 1.0,
+      "metadata": {}
+    },
+    {
+      "source_id": "rpt_monthly_summary.customer_id",
+      "target_id": "int_customers.customer_id",
+      "edge_type": "DERIVES_FROM",
+      "transformation": "direct mapping",
+      "confidence": 0.85,
+      "metadata": {
+        "source": "llm"
+      }
+    },
+    {
+      "source_id": "rpt_monthly_summary",
+      "target_id": "rpt_monthly_summary.full_name",
+      "edge_type": "HAS_COLUMN",
+      "transformation": "",
+      "confidence": 1.0,
+      "metadata": {}
+    },
+    {
+      "source_id": "rpt_monthly_summary.full_name",
+      "target_id": "int_customers.full_name",
+      "edge_type": "DERIVES_FROM",
+      "transformation": "direct mapping",
+      "confidence": 0.85,
+      "metadata": {
+        "source": "llm"
+      }
+    },
+    {
+      "source_id": "rpt_monthly_summary",
+      "target_id": "rpt_monthly_summary.region",
+      "edge_type": "HAS_COLUMN",
+      "transformation": "",
+      "confidence": 1.0,
+      "metadata": {}
+    },
+    {
+      "source_id": "rpt_monthly_summary.region",
+      "target_id": "int_customers.customer_region",
+      "edge_type": "DERIVES_FROM",
+      "transformation": "direct mapping",
+      "confidence": 0.85,
+      "metadata": {
+        "source": "llm"
+      }
+    },
+    {
+      "source_id": "rpt_monthly_summary",
+      "target_id": "rpt_monthly_summary.total_credits",
+      "edge_type": "HAS_COLUMN",
+      "transformation": "",
+      "confidence": 1.0,
+      "metadata": {}
+    },
+    {
+      "source_id": "rpt_monthly_summary.total_credits",
+      "target_id": "stg_transactions.amount",
+      "edge_type": "DERIVES_FROM",
+      "transformation": "sum of amount where transaction_type = 'CREDIT'",
+      "confidence": 0.85,
+      "metadata": {
+        "source": "llm"
+      }
+    },
+    {
+      "source_id": "rpt_monthly_summary",
+      "target_id": "rpt_monthly_summary.total_debits",
+      "edge_type": "HAS_COLUMN",
+      "transformation": "",
+      "confidence": 1.0,
+      "metadata": {}
+    },
+    {
+      "source_id": "rpt_monthly_summary.total_debits",
+      "target_id": "stg_transactions.amount",
+      "edge_type": "DERIVES_FROM",
+      "transformation": "sum of amount where transaction_type = 'DEBIT'",
+      "confidence": 0.85,
+      "metadata": {
+        "source": "llm"
+      }
+    },
+    {
+      "source_id": "rpt_monthly_summary",
+      "target_id": "rpt_monthly_summary.net_position_usd",
+      "edge_type": "HAS_COLUMN",
+      "transformation": "",
+      "confidence": 1.0,
+      "metadata": {}
+    },
+    {
+      "source_id": "rpt_monthly_summary.net_position_usd",
+      "target_id": "int_daily_balances.daily_net_amount_usd",
+      "edge_type": "DERIVES_FROM",
+      "transformation": "sum of daily_net_amount_usd",
+      "confidence": 0.85,
+      "metadata": {
+        "source": "llm"
+      }
+    },
+    {
+      "source_id": "rpt_monthly_summary",
+      "target_id": "rpt_monthly_summary.max_risk_level",
+      "edge_type": "HAS_COLUMN",
+      "transformation": "",
+      "confidence": 1.0,
+      "metadata": {}
+    },
+    {
+      "source_id": "rpt_monthly_summary.max_risk_level",
+      "target_id": "int_transaction_risk.risk_level",
+      "edge_type": "DERIVES_FROM",
+      "transformation": "maximum risk_level",
+      "confidence": 0.85,
+      "metadata": {
+        "source": "llm"
+      }
+    },
+    {
+      "source_id": "rpt_monthly_summary",
+      "target_id": "rpt_monthly_summary.transaction_count",
+      "edge_type": "HAS_COLUMN",
+      "transformation": "",
+      "confidence": 1.0,
+      "metadata": {}
+    },
+    {
+      "source_id": "rpt_monthly_summary.transaction_count",
+      "target_id": "stg_transactions.transaction_id",
+      "edge_type": "DERIVES_FROM",
+      "transformation": "count of transaction_id",
+      "confidence": 0.85,
+      "metadata": {
+        "source": "llm"
+      }
+    },
+    {
+      "source_id": "int_customers",
+      "target_id": "rpt_monthly_summary",
+      "edge_type": "WRITES_TO",
+      "transformation": "INSERT INTO rpt_monthly_summary via stored procedure sp_refresh_monthly_summary",
+      "confidence": 0.85,
+      "metadata": {
+        "source": "llm"
+      }
+    },
+    {
+      "source_id": "stg_transactions",
+      "target_id": "rpt_monthly_summary",
+      "edge_type": "WRITES_TO",
+      "transformation": "INSERT INTO rpt_monthly_summary via stored procedure sp_refresh_monthly_summary",
+      "confidence": 0.85,
+      "metadata": {
+        "source": "llm"
+      }
+    },
+    {
+      "source_id": "int_daily_balances",
+      "target_id": "rpt_monthly_summary",
+      "edge_type": "WRITES_TO",
+      "transformation": "INSERT INTO rpt_monthly_summary via stored procedure sp_refresh_monthly_summary",
+      "confidence": 0.85,
+      "metadata": {
+        "source": "llm"
+      }
+    },
+    {
+      "source_id": "int_transaction_risk",
+      "target_id": "rpt_monthly_summary",
+      "edge_type": "WRITES_TO",
+      "transformation": "INSERT INTO rpt_monthly_summary via stored procedure sp_refresh_monthly_summary",
+      "confidence": 0.85,
+      "metadata": {
+        "source": "llm"
+      }
+    }
+  ]
+}

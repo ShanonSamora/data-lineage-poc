@@ -49,16 +49,39 @@ class LineageGraph(BaseModel):
     edges: list[LineageEdge] = []
 
     def merge(self, other: LineageGraph) -> None:
-        """Merge another graph into this one, deduplicating by id."""
-        existing_node_ids = {n.id for n in self.nodes}
-        for node in other.nodes:
-            if node.id not in existing_node_ids:
-                self.nodes.append(node)
-                existing_node_ids.add(node.id)
+        """Merge another graph into this one, deduplicating by id.
 
-        existing_edges = {(e.source_id, e.target_id, e.edge_type) for e in self.edges}
-        for edge in other.edges:
-            key = (edge.source_id, edge.target_id, edge.edge_type)
-            if key not in existing_edges:
-                self.edges.append(edge)
-                existing_edges.add(key)
+        Node-merge policy: if a node already exists, keep the deterministic version
+        (metadata.source != "llm") over the LLM version. This prevents staging tables
+        that the LLM also "discovers" from being relabeled as llm-sourced.
+
+        Edge-merge policy: keep the highest-confidence variant when the same edge
+        (source_id, target_id, edge_type) appears twice."""
+        nodes_by_id = {n.id: (i, n) for i, n in enumerate(self.nodes)}
+        for incoming in other.nodes:
+            if incoming.id not in nodes_by_id:
+                self.nodes.append(incoming)
+                nodes_by_id[incoming.id] = (len(self.nodes) - 1, incoming)
+                continue
+            idx, existing = nodes_by_id[incoming.id]
+            existing_is_llm = (existing.metadata or {}).get("source") == "llm"
+            incoming_is_llm = (incoming.metadata or {}).get("source") == "llm"
+            # Prefer deterministic: replace only if existing was LLM and incoming is not.
+            if existing_is_llm and not incoming_is_llm:
+                self.nodes[idx] = incoming
+                nodes_by_id[incoming.id] = (idx, incoming)
+
+        edges_by_key: dict = {}
+        for i, e in enumerate(self.edges):
+            edges_by_key[(e.source_id, e.target_id, e.edge_type)] = (i, e)
+        for incoming in other.edges:
+            key = (incoming.source_id, incoming.target_id, incoming.edge_type)
+            if key not in edges_by_key:
+                self.edges.append(incoming)
+                edges_by_key[key] = (len(self.edges) - 1, incoming)
+                continue
+            idx, existing = edges_by_key[key]
+            # Keep the higher-confidence edge (preserves deterministic + transformation strings).
+            if incoming.confidence > existing.confidence:
+                self.edges[idx] = incoming
+                edges_by_key[key] = (idx, incoming)

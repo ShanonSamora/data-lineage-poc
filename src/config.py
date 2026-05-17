@@ -19,10 +19,6 @@ class RepoSource:
 
 
 class Settings(BaseSettings):
-    neo4j_uri: str = "bolt://localhost:7687"
-    neo4j_user: str = "neo4j"
-    neo4j_password: str = "lineage-poc-2024"
-
     openai_api_key: str = ""
     openai_model: str = "gpt-4.1-mini"
 
@@ -35,7 +31,7 @@ class Settings(BaseSettings):
     host: str = "0.0.0.0"
     port: int = 8000
 
-    model_config = {"env_file": ".env", "env_file_encoding": "utf-8"}
+    model_config = {"env_file": ".env", "env_file_encoding": "utf-8", "extra": "ignore"}
 
     def get_repo_sources(self) -> list[RepoSource]:
         """

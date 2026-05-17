@@ -15,6 +15,7 @@ Strategy:
 from __future__ import annotations
 
 import logging
+import re
 from pathlib import Path
 
 from src.models import LineageGraph
@@ -24,18 +25,21 @@ from src.parser_adf import is_adf_file, parse_adf_file
 
 logger = logging.getLogger(__name__)
 
-# SQL constructs that signal the deterministic parser may be insufficient
-_LLM_TRIGGER_KEYWORDS = [
-    "CREATE OR REPLACE PROCEDURE",
-    "CREATE OR REPLACE FUNCTION",
-    "CREATE PROCEDURE",
-    "CREATE FUNCTION",
-    "LANGUAGE plpgsql",
-    "EXECUTE IMMEDIATE",
-    "EXEC(",
-    "sp_executesql",
-    "DECLARE",
-    "BEGIN",
+# SQL constructs that signal the deterministic parser may be insufficient.
+# These patterns are matched with case-insensitive word boundaries to avoid
+# false positives like the `END` in `CASE WHEN ... END` or the `BEGIN` in
+# a column comment.
+_LLM_TRIGGER_PATTERNS = [
+    re.compile(r"\bCREATE\s+(OR\s+REPLACE\s+)?PROCEDURE\b", re.IGNORECASE),
+    re.compile(r"\bCREATE\s+(OR\s+REPLACE\s+)?FUNCTION\b", re.IGNORECASE),
+    re.compile(r"\bLANGUAGE\s+plpgsql\b", re.IGNORECASE),
+    re.compile(r"\bEXECUTE\s+IMMEDIATE\b", re.IGNORECASE),
+    re.compile(r"\bEXEC\s*\(", re.IGNORECASE),
+    re.compile(r"\bsp_executesql\b", re.IGNORECASE),
+    # Procedural blocks: BEGIN followed by a DECLARE or another procedural statement.
+    re.compile(r"\bBEGIN\b[\s\r\n]+(DECLARE|SET\s+@|EXEC|EXECUTE|IF\s|WHILE\s)", re.IGNORECASE),
+    # PL/pgSQL DECLARE block — `DECLARE ... BEGIN`, not the column-level DECLARE.
+    re.compile(r"\bDECLARE\b[\s\S]{0,500}?\bBEGIN\b", re.IGNORECASE),
 ]
 
 SQL_EXTENSIONS = {".sql", ".ddl", ".dml", ".hql"}
@@ -45,13 +49,18 @@ ALL_EXTENSIONS = SQL_EXTENSIONS | PYTHON_EXTENSIONS | ADF_EXTENSIONS
 
 
 def _needs_llm_fallback(sql_text: str, deterministic_graph: LineageGraph) -> bool:
-    """Decide whether an LLM pass is needed for a SQL file."""
-    upper = sql_text.upper()
-    for keyword in _LLM_TRIGGER_KEYWORDS:
-        if keyword.upper() in upper:
+    """Decide whether an LLM pass is needed for a SQL file.
+
+    Triggers if:
+      1. The file contains procedural constructs the SQL parser can't fully resolve
+         (stored procedures, EXECUTE IMMEDIATE, dynamic SQL, PL/pgSQL blocks).
+      2. The deterministic parser produced zero column-level edges despite the file
+         being non-trivial — suggests the content is opaque (e.g. all dynamic SQL).
+    """
+    for pattern in _LLM_TRIGGER_PATTERNS:
+        if pattern.search(sql_text):
             return True
 
-    # If deterministic parser found zero lineage edges, hand off to LLM
     from src.models import EdgeType
     lineage_edges = [e for e in deterministic_graph.edges if e.edge_type == EdgeType.DERIVES_FROM]
     if not lineage_edges and len(sql_text.strip()) > 100:
@@ -129,6 +138,8 @@ def analyze_directory(directory: str | Path, recursive: bool = True, source_repo
             except Exception as e:
                 logger.error("Failed to analyze %s: %s", path, e)
 
+    _prune_dead_nodes(graph)
+
     logger.info(
         "Directory scan complete: %d files → %d nodes, %d edges",
         sum(1 for n in graph.nodes if n.node_type.value == "FILE"),
@@ -136,6 +147,78 @@ def analyze_directory(directory: str | Path, recursive: bool = True, source_repo
         len(graph.edges),
     )
     return graph
+
+
+def _prune_dead_nodes(graph: LineageGraph) -> None:
+    """Drop nodes that don't carry meaningful lineage.
+
+    Two pruning rules, applied iteratively until no more nodes are removed:
+
+    1. *Orphan* nodes — only have ``DEFINED_IN``/``HAS_COLUMN`` edges as source, no
+       real lineage edges. These are typically local variables the LLM noticed but
+       couldn't connect.
+
+    2. *Schemaless LLM tables* — TABLE nodes with ``metadata.source == "llm"`` that
+       have no ``HAS_COLUMN`` edges. These are intermediate pandas variables
+       (`balance_agg`, `df_scores`, etc.) that the LLM emitted as tables but
+       couldn't enumerate columns for. They add noise without value.
+
+    Protected node types (always kept regardless): FILE, PROCEDURE, PYTHON_FUNCTION,
+    ADF_PIPELINE, ADF_DATASET, ADF_DATAFLOW."""
+    from src.models import EdgeType, NodeType
+
+    PROTECTED = {NodeType.FILE, NodeType.PROCEDURE, NodeType.PYTHON_FUNCTION,
+                 NodeType.ADF_PIPELINE, NodeType.ADF_DATASET, NodeType.ADF_DATAFLOW}
+
+    total_pruned = 0
+    # Iterate until stable — pruning one node may create new orphans.
+    for _ in range(10):
+        edges_by_node: dict[str, list] = {}
+        has_column_count: dict[str, int] = {}
+        for e in graph.edges:
+            edges_by_node.setdefault(e.source_id, []).append(e)
+            edges_by_node.setdefault(e.target_id, []).append(e)
+            if e.edge_type == EdgeType.HAS_COLUMN:
+                has_column_count[e.source_id] = has_column_count.get(e.source_id, 0) + 1
+
+        dead_ids: set[str] = set()
+        for n in graph.nodes:
+            if n.node_type in PROTECTED:
+                continue
+            edges = edges_by_node.get(n.id, [])
+
+            # Rule 1: orphan (no edges except an outgoing DEFINED_IN to the file).
+            # HAS_COLUMN edges count as meaningful — a node with columns is a real schematized
+            # table even if no upstream/downstream lineage points at it yet (e.g. staging tables
+            # before view files are parsed).
+            meaningful = [
+                e for e in edges
+                if not (e.source_id == n.id and e.edge_type == EdgeType.DEFINED_IN)
+            ]
+            if not meaningful:
+                dead_ids.add(n.id)
+                continue
+
+            # Rule 2: schemaless LLM table — TABLE with source=llm metadata but no HAS_COLUMN.
+            if (
+                n.node_type == NodeType.TABLE
+                and (n.metadata or {}).get("source") == "llm"
+                and has_column_count.get(n.id, 0) == 0
+            ):
+                dead_ids.add(n.id)
+
+        if not dead_ids:
+            break
+
+        total_pruned += len(dead_ids)
+        graph.nodes = [n for n in graph.nodes if n.id not in dead_ids]
+        graph.edges = [
+            e for e in graph.edges
+            if e.source_id not in dead_ids and e.target_id not in dead_ids
+        ]
+
+    if total_pruned:
+        logger.info("Pruned %d dead/schemaless nodes (and their incident edges)", total_pruned)
 
 
 def analyze_multiple_repos(repo_sources: list | None = None) -> LineageGraph:

@@ -1,0 +1,53 @@
+{
+  "name": "RefreshReportingMart",
+  "properties": {
+    "description": "Run the monthly-summary stored procedure and copy the customer-exposure report to the downstream BI mart.",
+    "activities": [
+      {
+        "name": "RunMonthlySummaryProc",
+        "type": "SqlServerStoredProcedure",
+        "linkedServiceName": {
+          "referenceName": "AzureSqlDatabase",
+          "type": "LinkedServiceReference"
+        },
+        "typeProperties": {
+          "storedProcedureName": "sp_refresh_monthly_summary",
+          "storedProcedureParameters": {
+            "p_year":  { "value": "@pipeline().parameters.year",  "type": "Int32" },
+            "p_month": { "value": "@pipeline().parameters.month", "type": "Int32" }
+          }
+        }
+      },
+      {
+        "name": "ExportExposureToBIMart",
+        "type": "Copy",
+        "dependsOn": [
+          {
+            "activity": "RunMonthlySummaryProc",
+            "dependencyConditions": ["Succeeded"]
+          }
+        ],
+        "inputs": [
+          {
+            "referenceName": "SqlRptCustomerExposure",
+            "type": "DatasetReference"
+          }
+        ],
+        "outputs": [
+          {
+            "referenceName": "ExternalReportingMart",
+            "type": "DatasetReference"
+          }
+        ],
+        "typeProperties": {
+          "source": { "type": "AzureSqlSource" },
+          "sink":   { "type": "AzurePostgreSqlSink" }
+        }
+      }
+    ],
+    "parameters": {
+      "year":  { "type": "Int" },
+      "month": { "type": "Int" }
+    }
+  }
+}

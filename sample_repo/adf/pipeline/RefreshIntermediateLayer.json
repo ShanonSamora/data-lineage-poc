@@ -1,0 +1,39 @@
+{
+  "name": "RefreshIntermediateLayer",
+  "properties": {
+    "description": "Refresh intermediate SQL views and run the Python risk-scoring notebook to populate int_python_customer_scores.",
+    "activities": [
+      {
+        "name": "RunPythonRiskScoring",
+        "type": "DatabricksNotebook",
+        "typeProperties": {
+          "notebookPath": "sample_repo\\python\\transform_pipeline.py",
+          "baseParameters": {
+            "target_table": "int_python_customer_scores"
+          }
+        },
+        "linkedServiceName": {
+          "referenceName": "AzureDatabricks",
+          "type": "LinkedServiceReference"
+        }
+      },
+      {
+        "name": "TriggerReportingMartRefresh",
+        "type": "ExecutePipeline",
+        "dependsOn": [
+          {
+            "activity": "RunPythonRiskScoring",
+            "dependencyConditions": ["Succeeded"]
+          }
+        ],
+        "typeProperties": {
+          "pipeline": {
+            "referenceName": "RefreshReportingMart",
+            "type": "PipelineReference"
+          },
+          "waitOnCompletion": true
+        }
+      }
+    ]
+  }
+}

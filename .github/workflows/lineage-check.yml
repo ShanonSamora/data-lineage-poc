@@ -19,7 +19,7 @@ jobs:
   lineage-check:
     name: Lineage Impact Analysis
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 15
 
     steps:
       - name: Checkout repository
@@ -38,6 +38,7 @@ jobs:
 
       - name: Run lineage impact analysis
         id: lineage
+        continue-on-error: true  # never block the PR; surface a degraded report instead
         env:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
         run: |
@@ -48,6 +49,24 @@ jobs:
             --output-file lineage-report.md
 
           # Store report for the comment step
+          {
+            echo 'REPORT<<EOF'
+            cat lineage-report.md
+            echo 'EOF'
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Build degraded report if analysis failed
+        if: steps.lineage.outcome == 'failure'
+        run: |
+          cat > lineage-report.md <<'EOF'
+          ## Data Lineage Impact Report
+
+          ⚠️ **Analysis failed** — could not generate the lineage diff for this PR.
+
+          This is usually transient: an OpenAI API timeout, a malformed SQL file, or a parser exception. Re-run the workflow or contact the maintainer if it persists.
+
+          The deterministic SQL and ADF lineage analysis does **not** require the LLM, so the failure typically points to a Python file or stored procedure that hit the LLM fallback.
+          EOF
           {
             echo 'REPORT<<EOF'
             cat lineage-report.md

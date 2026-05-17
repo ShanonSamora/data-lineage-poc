@@ -3,8 +3,7 @@ Entry point for the Data Lineage POC.
 
 Usage:
     python main.py                  — Start the web server (API + UI)
-    python main.py --analyze        — Analyze sample_repo and print results (no server)
-    python main.py --analyze-local  — Same but skip Neo4j (print to stdout)
+    python main.py --analyze        — Analyze sample_repo and print JSON to stdout
     python main.py --analyze-multi  — Analyze all configured repos (multi-repo mode)
     python main.py --pr-check       — Analyse lineage impact of a PR (Git diff)
 """
@@ -30,7 +29,7 @@ def _run_server():
     uvicorn.run("src.api:app", host=settings.host, port=settings.port, reload=True)
 
 
-def _analyze(use_neo4j: bool):
+def _analyze():
     from src.config import settings
     from src.engine import analyze_directory
 
@@ -39,25 +38,14 @@ def _analyze(use_neo4j: bool):
     graph = analyze_directory(repo)
     logger.info("Extracted %d nodes, %d edges", len(graph.nodes), len(graph.edges))
 
-    if use_neo4j:
-        from src.graph_store import Neo4jStore
-
-        store = Neo4jStore()
-        store.setup_indexes()
-        store.clear_all()
-        result = store.store_graph(graph)
-        store.close()
-        logger.info("Stored in Neo4j: %s", result)
-    else:
-        # Print JSON summary to stdout
-        output = {
-            "nodes": [n.model_dump() for n in graph.nodes],
-            "edges": [e.model_dump() for e in graph.edges],
-        }
-        print(json.dumps(output, indent=2, default=str))
+    output = {
+        "nodes": [n.model_dump() for n in graph.nodes],
+        "edges": [e.model_dump() for e in graph.edges],
+    }
+    print(json.dumps(output, indent=2, default=str))
 
 
-def _analyze_multi(use_neo4j: bool):
+def _analyze_multi():
     from src.config import settings
     from src.engine import analyze_multiple_repos
 
@@ -67,22 +55,12 @@ def _analyze_multi(use_neo4j: bool):
     graph = analyze_multiple_repos(repo_sources)
     logger.info("Extracted %d nodes, %d edges across all repos", len(graph.nodes), len(graph.edges))
 
-    if use_neo4j:
-        from src.graph_store import Neo4jStore
-
-        store = Neo4jStore()
-        store.setup_indexes()
-        store.clear_all()
-        result = store.store_graph(graph)
-        store.close()
-        logger.info("Stored in Neo4j: %s", result)
-    else:
-        output = {
-            "repos": [r.name for r in repo_sources],
-            "nodes": [n.model_dump() for n in graph.nodes],
-            "edges": [e.model_dump() for e in graph.edges],
-        }
-        print(json.dumps(output, indent=2, default=str))
+    output = {
+        "repos": [r.name for r in repo_sources],
+        "nodes": [n.model_dump() for n in graph.nodes],
+        "edges": [e.model_dump() for e in graph.edges],
+    }
+    print(json.dumps(output, indent=2, default=str))
 
 
 def _pr_check(base_ref: str, head_ref: str, output_file: str | None):
@@ -100,10 +78,8 @@ def _pr_check(base_ref: str, head_ref: str, output_file: str | None):
     else:
         print(report)
 
-    # Also dump structured JSON to stderr for programmatic consumption
     logger.info("Result: %s", json.dumps(result.as_dict(), indent=2, default=str))
 
-    # Exit code: 0 = no impact, 1 = lineage impacted (useful for CI gates)
     if result.has_lineage_impact:
         logger.info("Lineage IMPACT DETECTED — review the report above.")
     else:
@@ -112,10 +88,8 @@ def _pr_check(base_ref: str, head_ref: str, output_file: str | None):
 
 def main():
     parser = argparse.ArgumentParser(description="Data Lineage POC")
-    parser.add_argument("--analyze", action="store_true", help="Analyze repo and store in Neo4j")
-    parser.add_argument("--analyze-local", action="store_true", help="Analyze repo, print JSON (no Neo4j)")
-    parser.add_argument("--analyze-multi", action="store_true", help="Analyze all configured repos (multi-repo)")
-    parser.add_argument("--analyze-multi-local", action="store_true", help="Multi-repo analysis, print JSON (no Neo4j)")
+    parser.add_argument("--analyze", action="store_true", help="Analyze repo and print JSON")
+    parser.add_argument("--analyze-multi", action="store_true", help="Analyze all configured repos")
     parser.add_argument("--pr-check", action="store_true", help="Analyse lineage impact of a Git diff (PR mode)")
     parser.add_argument("--base", type=str, default="origin/main", help="Base Git ref for PR check (default: origin/main)")
     parser.add_argument("--head", type=str, default="HEAD", help="Head Git ref for PR check (default: HEAD)")
@@ -123,13 +97,9 @@ def main():
     args = parser.parse_args()
 
     if args.analyze:
-        _analyze(use_neo4j=True)
-    elif args.analyze_local:
-        _analyze(use_neo4j=False)
+        _analyze()
     elif args.analyze_multi:
-        _analyze_multi(use_neo4j=True)
-    elif args.analyze_multi_local:
-        _analyze_multi(use_neo4j=False)
+        _analyze_multi()
     elif args.pr_check:
         _pr_check(args.base, args.head, args.output_file)
     else:

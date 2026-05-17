@@ -182,9 +182,20 @@ def _handle_create(stmt: exp.Create, graph: LineageGraph, file_path: Path) -> No
 
 
 def _handle_insert(stmt: exp.Insert, graph: LineageGraph, file_path: Path) -> None:
-    """Handle INSERT INTO ... SELECT statements."""
+    """Handle INSERT INTO ... SELECT statements.
+
+    The target can be either:
+    - exp.Table directly (INSERT INTO t SELECT ...)
+    - exp.Schema wrapping a Table (INSERT INTO t(col1, col2) SELECT ...)
+    """
     table_expr = stmt.this
-    if isinstance(table_expr, exp.Table):
+    if isinstance(table_expr, exp.Schema):
+        inner = table_expr.this
+        if isinstance(inner, exp.Table):
+            target = inner.name.lower()
+        else:
+            return
+    elif isinstance(table_expr, exp.Table):
         target = table_expr.name.lower()
     else:
         return

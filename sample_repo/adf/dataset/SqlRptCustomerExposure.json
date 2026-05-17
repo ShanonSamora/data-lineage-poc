@@ -1,0 +1,13 @@
+{
+  "name": "SqlRptCustomerExposure",
+  "properties": {
+    "type": "AzureSqlTable",
+    "linkedServiceName": {
+      "referenceName": "AzureSqlDatabase",
+      "type": "LinkedServiceReference"
+    },
+    "typeProperties": {
+      "table": "rpt_customer_exposure"
+    }
+  }
+}

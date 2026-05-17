@@ -1,0 +1,14 @@
+{
+  "name": "ExternalReportingMart",
+  "properties": {
+    "type": "AzurePostgreSqlTable",
+    "linkedServiceName": {
+      "referenceName": "DownstreamPostgresMart",
+      "type": "LinkedServiceReference"
+    },
+    "typeProperties": {
+      "schema": "bi",
+      "table": "customer_exposure_snapshot"
+    }
+  }
+}

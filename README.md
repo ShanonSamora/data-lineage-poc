@@ -21,9 +21,9 @@ If you've ever had to answer *"where does this number come from?"* by manually t
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
-│              Source Code Repositories (multi-repo)             │
-│  .sql files    .py files    ADF JSON    stored procs          │
-└──────────────────────┬────────────────────────────────────────┘
+│              Source Code Repositories (multi-repo)              │
+│   .sql files    .py files    ADF JSON    stored procs           │
+└──────────────────────┬──────────────────────────────────────────┘
                        │
               ┌────────▼────────┐
               │  Hybrid Engine  │
@@ -45,7 +45,7 @@ If you've ever had to answer *"where does this number come from?"* by manually t
                        │
               ┌────────▼────────┐
               │  Lineage Graph  │──── REST API ──── Web UI
-              │  (Neo4j / mem)  │                  (vis.js)
+              │   (in-memory)   │
               └────────┬────────┘
                        │
               ┌────────▼────────┐
@@ -69,51 +69,46 @@ cd data-lineage-poc
 pip install -e .
 ```
 
-### 2. Run (No Neo4j, No API Key needed)
-
-The fastest way to see it work — analyzes the included `sample_repo/` and serves the web UI:
+### 2. Verify install
 
 ```bash
-python main.py
+# Should print ~152 nodes, ~248 edges
+python -c "from src.engine import analyze_directory; g = analyze_directory('sample_repo'); print(len(g.nodes), 'nodes,', len(g.edges), 'edges')"
+
+# Run the test suite (~63 tests, all should pass)
+pytest -q
 ```
 
-Open **http://localhost:8000** → click **"Analyze (Local)"** → explore the graph.
-
-This mode uses in-memory storage. No external dependencies required.
-
-### 3. Run with Neo4j (persistent storage, graph queries)
+### 3. Run the server
 
 ```bash
-# Start Neo4j
-docker compose up -d
-
-# Copy and configure environment
+# Optional: enable LLM fallback for Python and stored procedures
 cp .env.example .env
-# Edit .env → set OPENAI_API_KEY if you want LLM fallback
+# Edit .env and set OPENAI_API_KEY=sk-...
 
-# Start server
 python main.py
 ```
 
-Open **http://localhost:8000** → click **"Analyze (Neo4j)"**.
+Open **http://localhost:8000** → click **"Analyze"** → explore the graph.
 
-Neo4j Browser available at **http://localhost:7474** (user: `neo4j`, password: `lineage-poc-2024`).
+No external database required — the graph lives in memory. Without `OPENAI_API_KEY` set, deterministic SQL/ADF lineage still works fully, but Python files and stored procedures are skipped. The server logs a warning at startup if the key is missing.
 
 ### 4. CLI Mode (no server)
 
 ```bash
-# Print lineage JSON to stdout (no Neo4j)
-python main.py --analyze-local
-
-# Analyze and store in Neo4j
+# Print full lineage as JSON to stdout
 python main.py --analyze
 
 # Multi-repo analysis
-python main.py --analyze-multi-local
+python main.py --analyze-multi
 
 # PR impact check (requires Git repo)
-python main.py --pr-check --base-ref origin/main --head-ref HEAD
+python main.py --pr-check --base origin/main --head HEAD
 ```
+
+### 5. Live demo
+
+See [DEMO.md](DEMO.md) for a 7-10 minute walkthrough script.
 
 ---
 
@@ -123,7 +118,6 @@ python main.py --pr-check --base-ref origin/main --head-ref HEAD
 data-lineage-poc/
 ├── main.py                  # Entry point (server or CLI)
 ├── pyproject.toml           # Dependencies and project metadata
-├── docker-compose.yml       # Neo4j container
 ├── .env.example             # Configuration template
 │
 ├── src/
@@ -134,11 +128,10 @@ data-lineage-poc/
 │   ├── parser_sql.py        # Deterministic SQL parser (sqlglot)
 │   ├── parser_llm.py        # LLM fallback parser (OpenAI)
 │   ├── parser_adf.py        # Azure Data Factory JSON parser
-│   ├── graph_store.py       # Neo4j persistence and queries
 │   ├── diff.py              # Graph diff engine (before/after comparison)
 │   ├── pr_analyzer.py       # PR lineage impact analyzer
 │   └── templates/
-│       └── index.html       # Web UI (single-page, vis.js graph)
+│       └── index.html       # Web UI (single-page, Flow View + vis.js)
 │
 ├── sample_repo/             # Example data warehouse to analyze
 │   ├── sql/
@@ -147,16 +140,16 @@ data-lineage-poc/
 │   │   ├── 03_reporting_tables.sql     # Reporting mart (rpt_*)
 │   │   └── 04_stored_procedures.sql    # Stored proc (LLM-only)
 │   ├── python/
-│   │   └── transform_pipeline.py       # Pandas pipeline (LLM-only)
+│   │   └── transform_pipeline.py       # Pandas pipeline (reads stg_*, writes rpt_*)
 │   └── adf/                            # Azure Data Factory artifacts
 │       ├── pipeline/                   # ADF pipeline definitions
 │       ├── dataset/                    # ADF dataset definitions
 │       └── dataflow/                   # ADF dataflow definitions
 │
-├── tests/                   # Automated test suite (23 tests)
-│   ├── test_diff.py         # 9 tests for graph diff engine
-│   ├── test_pr_analyzer.py  # 5 tests for PR impact analysis
-│   └── test_parser_adf.py   # 9 tests for ADF parser
+├── tests/                   # Automated test suite
+│   ├── test_diff.py         # Graph diff engine
+│   ├── test_pr_analyzer.py  # PR impact analysis
+│   └── test_parser_adf.py   # ADF parser
 │
 ├── .github/workflows/
 │   └── lineage-check.yml    # GitHub Action: auto PR lineage check
@@ -165,37 +158,16 @@ data-lineage-poc/
     └── data-lineage.md      # Research paper
 ```
 
-## Sample Data Pipeline
-
-The included `sample_repo/` simulates a financial data warehouse with three layers:
-
-```
-STAGING (raw sources)          INTERMEDIATE (business logic)      REPORTING (dashboards)
-─────────────────────          ─────────────────────────────      ──────────────────────
-stg_customers          ──┐
-stg_accounts           ──┼──►  int_customers              ──┐
-stg_branches           ──┘                                   ├──►  rpt_customer_exposure
-stg_transactions       ──┬──►  int_daily_balances          ──┤
-stg_exchange_rates     ──┘                                   ├──►  rpt_regional_risk_summary
-stg_transactions       ──────► int_transaction_risk        ──┘
-                                                               ┌──  rpt_monthly_summary
-stg_transactions + int_* ──────► sp_refresh_monthly_summary ──┘    (stored proc → LLM)
-```
-
-The full sample repo (SQL + Python + ADF) produces **98 nodes** and **110 edges** from deterministic parsing alone. With the LLM enabled, the stored procedure and Python file add more coverage.
-
 ---
 
 ## REST API
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
-| `POST` | `/analyze` | Scan repo → extract lineage → store in Neo4j |
-| `POST` | `/analyze-local` | Scan repo → extract lineage → store in memory |
-| `POST` | `/analyze-multi` | Multi-repo analysis → store in Neo4j |
+| `POST` | `/analyze` | Scan repo → extract lineage → store in memory |
+| `POST` | `/analyze-multi` | Multi-repo analysis |
 | `POST` | `/pr-check` | PR lineage impact analysis (Git diff) |
-| `GET` | `/graph` | Full lineage graph from Neo4j |
-| `GET` | `/graph-local` | Full lineage graph from memory |
+| `GET` | `/graph` | Full lineage graph |
 | `GET` | `/upstream/{node_id}` | Trace where a column/table gets its data from |
 | `GET` | `/downstream/{node_id}` | Trace what depends on a column/table |
 | `GET` | `/impact/{node_id}` | Impact analysis: what breaks if this changes? |
@@ -222,9 +194,6 @@ All settings are loaded from environment variables or a `.env` file:
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `NEO4J_URI` | `bolt://localhost:7687` | Neo4j connection string |
-| `NEO4J_USER` | `neo4j` | Neo4j username |
-| `NEO4J_PASSWORD` | `lineage-poc-2024` | Neo4j password |
 | `OPENAI_API_KEY` | *(empty)* | OpenAI API key for LLM fallback |
 | `OPENAI_MODEL` | `gpt-4.1-mini` | Model for code analysis |
 | `REPO_PATH` | `./sample_repo` | Directory to analyze |
@@ -237,7 +206,6 @@ The project uses **GPT-4.1-mini** by default. Rationale:
 
 - Best code comprehension in its pricing tier for structured extraction tasks
 - Native JSON output adherence — critical for parsing code into lineage graphs
-- Same OpenAI SDK already in the dependency tree
 - ~$0.40/1M input tokens (vs $2.50 for GPT-4.1, $10 for Claude Sonnet)
 
 To swap models, set `OPENAI_MODEL` in `.env` (any OpenAI-compatible model works).
@@ -245,8 +213,6 @@ To swap models, set `OPENAI_MODEL` in `.env` (any OpenAI-compatible model works)
 ---
 
 ## Graph Model
-
-Nodes and edges stored in Neo4j (or in-memory):
 
 **Node Types:**
 | Type | Description | Example |
@@ -297,47 +263,7 @@ Point `REPO_PATH` to any directory containing `.sql` and/or `.py` files:
 REPO_PATH=/path/to/your/dbt/project python main.py
 ```
 
-The engine recursively scans for `.sql`, `.ddl`, `.dml`, `.hql`, `.py`, `.pyspark` files, and ADF `.json` files (in `pipeline/`, `dataset/`, `dataflow/` folders).
-
----
-
-## Demo Script (5-minute walkthrough)
-
-Quick steps to demonstrate the system live:
-
-```bash
-# 1. Install (one-time)
-pip install -e .
-
-# 2. Start the server
-python main.py
-```
-
-**In the browser at http://localhost:8000:**
-
-1. Click **"Analyze (Local)"** → see "98 nodes, 110 edges" toast notification
-2. The graph renders — tables (blue), views (green), columns (purple), ADF components
-3. Click any node → sidebar shows details, connections, confidence scores
-4. Click **"↑ Upstream"** on a reporting table → highlights the full data origin chain
-5. Click **"↓ Downstream"** on a staging table → shows all affected downstream assets
-6. Use the **Search** box → type `customer` → highlights all customer-related nodes
-
-**In the terminal (API demo):**
-
-```bash
-# Run analysis and see JSON output
-python main.py --analyze-local
-
-# Run tests (23 pass)
-python -m pytest tests/ -v
-```
-
-**Key talking points for the demo:**
-- Deterministic SQL parser extracts column-level lineage from 4 SQL files instantly
-- ADF parser covers Azure Data Factory pipelines, datasets, and dataflows
-- Hybrid engine: LLM fallback handles Python and complex SQL (when API key is set)
-- No execution needed — pure static analysis of source code
-- CI/CD integration: GitHub Action auto-comments lineage impact on pull requests
+The engine recursively scans for `.sql`, `.ddl`, `.dml`, `.hql`, `.py`, `.pyspark` files, and ADF `.json` files.
 
 ---
 
@@ -347,10 +273,9 @@ python -m pytest tests/ -v
 |-----------|-----------|---------|
 | SQL Parser | [sqlglot](https://github.com/tobymao/sqlglot) | Deterministic column-level lineage from SQL |
 | LLM | OpenAI GPT-4.1-mini | Interpret stored procs, dynamic SQL, Python |
-| Graph DB | [Neo4j](https://neo4j.com/) | Store and query lineage as a graph |
 | API | [FastAPI](https://fastapi.tiangolo.com/) | REST endpoints |
-| Web UI | [vis.js Network](https://visjs.github.io/vis-network/) | Interactive graph visualization |
+| Web UI | Custom Flow View + [vis.js Network](https://visjs.github.io/vis-network/) | Interactive lineage visualization |
 | Config | [pydantic-settings](https://docs.pydantic.dev/latest/concepts/pydantic_settings/) | Type-safe configuration |
 | Git | [GitPython](https://gitpython.readthedocs.io/) | PR diff analysis |
 | CI/CD | [GitHub Actions](https://docs.github.com/en/actions) | Automatic PR lineage checks |
-| Testing | [pytest](https://docs.pytest.org/) | 23 automated tests |
+| Testing | [pytest](https://docs.pytest.org/) | Automated tests |

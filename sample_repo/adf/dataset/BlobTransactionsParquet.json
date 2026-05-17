@@ -1,0 +1,17 @@
+{
+  "name": "BlobTransactionsParquet",
+  "properties": {
+    "type": "Parquet",
+    "linkedServiceName": {
+      "referenceName": "AzureBlobStorage",
+      "type": "LinkedServiceReference"
+    },
+    "typeProperties": {
+      "location": {
+        "type": "AzureBlobStorageLocation",
+        "container": "raw-data",
+        "fileName": "transactions.parquet"
+      }
+    }
+  }
+}

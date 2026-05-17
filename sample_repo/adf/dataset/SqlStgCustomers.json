@@ -1,0 +1,13 @@
+{
+  "name": "SqlStgCustomers",
+  "properties": {
+    "type": "AzureSqlTable",
+    "linkedServiceName": {
+      "referenceName": "AzureSqlDatabase",
+      "type": "LinkedServiceReference"
+    },
+    "typeProperties": {
+      "table": "stg_customers"
+    }
+  }
+}

@@ -64,15 +64,27 @@ Return this EXACT JSON structure (no markdown, no explanation):
 Rules:
 - Use lowercase for all names.
 - If a column is computed (e.g. SUM, CASE, concat), list ALL source columns.
-- For Python/Pandas, treat DataFrames as tables. Use variable names as table names.
-  Identify which database tables each DataFrame reads from or writes to.
-  If a function reads a table into a DataFrame, add a data_flow from the database table to the DataFrame.
-  If a DataFrame writes to a table (e.g. to_sql), add a data_flow from the DataFrame to the table.
-  If a function takes DataFrames as input and produces a new one, add data_flows from input DataFrames to the output.
-- For PYTHON_FUNCTION entries, add data_flows connecting them to the DataFrames/tables they read and produce.
-- For dynamic SQL, infer the likely tables/columns from the string template.
-- Include data_flows for EVERY read/write/transform relationship between entities.
-- Return empty arrays if no lineage can be determined.
+
+For Python/Pandas/PySpark code, emit TABLE entries ONLY for entities that exist at a persistence boundary:
+  (a) Database tables/views referenced by literal name in pd.read_sql/spark.read/SELECT (READ boundary).
+  (b) DataFrames produced directly by pd.read_sql/spark.read (these are the named DataFrame variables of the READ boundary).
+  (c) The literal target name of df.to_sql("X"), spark.write.saveAsTable("X"), or INSERT INTO X (the WRITE boundary).
+
+DO NOT emit TABLE entries for intermediate DataFrames produced by:
+  - merge / join / concat results
+  - groupby / agg / pivot results
+  - apply / transform / map results
+  - function returns (e.g. result = build_something(...))
+  - variable renames (e.g. df_metrics = result)
+
+For each to_sql("X", ...) call, emit columns entries that map EACH column of X to its ULTIMATE source column in the upstream database tables/views. "See through" the pandas transformations — do not stop at the intermediate DataFrame, trace back to the named table the data originally came from.
+
+DO NOT emit data_flows between intermediate variables.
+DO NOT emit data_flows between two PYTHON_FUNCTION entries (function calls are not data lineage and will be discarded).
+
+The "operation" string MUST clearly indicate direction: use "pd.read_sql", "SELECT", "spark.read" for reads; use "to_sql", "INSERT", "saveAsTable" for writes.
+For dynamic SQL, infer the likely tables/columns from the string template.
+Return empty arrays if no lineage can be determined.
 """
 
 
@@ -103,11 +115,18 @@ def interpret_with_llm(file_path: str | Path, code: str) -> LineageGraph:
                 {"role": "user", "content": f"File: {file_path}\n\n```\n{code}\n```"},
             ],
             temperature=0.0,
-            max_tokens=4096,
+            max_tokens=16384,
+            response_format={"type": "json_object"},
         )
     except Exception as e:
         logger.error("LLM API call failed for %s: %s", file_path, e)
         return graph
+
+    if response.choices[0].finish_reason == "length":
+        logger.warning(
+            "LLM response truncated for %s (hit max_tokens=16384) — lineage may be incomplete",
+            file_path,
+        )
 
     raw = response.choices[0].message.content or ""
 
@@ -156,10 +175,14 @@ def interpret_with_llm(file_path: str | Path, code: str) -> LineageGraph:
         ))
 
     for col in data.get("columns", []):
+        if not col.get("target_table") or not col.get("source_table"):
+            continue
         target_table = col["target_table"].lower()
-        target_col = col["target_column"].lower()
+        target_col = (col.get("target_column") or "").lower()
         source_table = col["source_table"].lower()
-        source_col = col["source_column"].lower()
+        source_col = (col.get("source_column") or "").lower()
+        if not target_col or not source_col:
+            continue
         transformation = col.get("transformation", "")
 
         target_col_id = f"{target_table}.{target_col}"
@@ -176,6 +199,19 @@ def interpret_with_llm(file_path: str | Path, code: str) -> LineageGraph:
             metadata={"table": source_table, "source": "llm"},
         ))
 
+        # HAS_COLUMN edges so the prune pass recognizes these tables as schematized.
+        # Duplicates are deduplicated by LineageGraph.merge().
+        graph.edges.append(LineageEdge(
+            source_id=target_table,
+            target_id=target_col_id,
+            edge_type=EdgeType.HAS_COLUMN,
+        ))
+        graph.edges.append(LineageEdge(
+            source_id=source_table,
+            target_id=source_col_id,
+            edge_type=EdgeType.HAS_COLUMN,
+        ))
+
         graph.edges.append(LineageEdge(
             source_id=target_col_id,
             target_id=source_col_id,
@@ -186,11 +222,18 @@ def interpret_with_llm(file_path: str | Path, code: str) -> LineageGraph:
         ))
 
     existing_node_ids = {n.id for n in graph.nodes}
+    # Existing PYTHON_FUNCTION ids — used to drop function-call edges that aren't data lineage.
+    function_ids = {n.id for n in graph.nodes if n.node_type == NodeType.PYTHON_FUNCTION}
+
     for flow in data.get("data_flows", []):
         source = flow.get("source", "").lower()
         target = flow.get("target", "").lower()
         operation = flow.get("operation", "")
         if not source or not target:
+            continue
+
+        # Drop function-to-function "calls" edges: data lineage only, not invocation graph.
+        if source in function_ids and target in function_ids:
             continue
 
         for name in (source, target):
@@ -203,13 +246,31 @@ def interpret_with_llm(file_path: str | Path, code: str) -> LineageGraph:
                 ))
                 existing_node_ids.add(name)
 
-        graph.edges.append(LineageEdge(
-            source_id=target,
-            target_id=source,
-            edge_type=EdgeType.READS_FROM,
-            transformation=operation,
-            confidence=0.85,
-            metadata={"source": "llm"},
+        # Classify the flow: write-like operations (to_sql, INSERT, saveAsTable) produce
+        # WRITES_TO edges in the source → target direction. Reads (read_sql, SELECT, merge,
+        # groupby, etc.) produce READS_FROM in target → source (consumer → producer) form.
+        op_lower = operation.lower()
+        is_write = any(kw in op_lower for kw in (
+            "to_sql", "insert", "saveastable", "write", "writeto", "writes_to",
+            "df.to_", "spark.write", "savemode",
         ))
+        if is_write:
+            graph.edges.append(LineageEdge(
+                source_id=source,
+                target_id=target,
+                edge_type=EdgeType.WRITES_TO,
+                transformation=operation,
+                confidence=0.85,
+                metadata={"source": "llm"},
+            ))
+        else:
+            graph.edges.append(LineageEdge(
+                source_id=target,
+                target_id=source,
+                edge_type=EdgeType.READS_FROM,
+                transformation=operation,
+                confidence=0.85,
+                metadata={"source": "llm"},
+            ))
 
     return graph

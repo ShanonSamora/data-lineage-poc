@@ -1,5 +1,5 @@
 {
-  "name": "SqlRawCustomers",
+  "name": "SqlStgExchangeRates",
   "properties": {
     "type": "AzureSqlTable",
     "linkedServiceName": {
@@ -7,8 +7,7 @@
       "type": "LinkedServiceReference"
     },
     "typeProperties": {
-      "schema": "raw",
-      "table": "customers"
+      "table": "stg_exchange_rates"
     }
   }
 }

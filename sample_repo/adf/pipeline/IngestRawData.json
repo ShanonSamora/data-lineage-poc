@@ -1,0 +1,79 @@
+{
+  "name": "IngestRawData",
+  "properties": {
+    "description": "Land Blob source files into the SQL staging layer (stg_*).",
+    "activities": [
+      {
+        "name": "CopyCustomersBlobToStg",
+        "type": "Copy",
+        "inputs": [
+          {
+            "referenceName": "BlobCustomersCSV",
+            "type": "DatasetReference"
+          }
+        ],
+        "outputs": [
+          {
+            "referenceName": "SqlStgCustomers",
+            "type": "DatasetReference"
+          }
+        ],
+        "typeProperties": {
+          "source": { "type": "DelimitedTextSource" },
+          "sink":   { "type": "AzureSqlSink", "writeBehavior": "upsert" }
+        }
+      },
+      {
+        "name": "CopyTransactionsBlobToStg",
+        "type": "Copy",
+        "inputs": [
+          {
+            "referenceName": "BlobTransactionsParquet",
+            "type": "DatasetReference"
+          }
+        ],
+        "outputs": [
+          {
+            "referenceName": "SqlStgTransactions",
+            "type": "DatasetReference"
+          }
+        ],
+        "typeProperties": {
+          "source": { "type": "ParquetSource" },
+          "sink":   { "type": "AzureSqlSink" }
+        }
+      },
+      {
+        "name": "CopyExchangeRatesBlobToStg",
+        "type": "Copy",
+        "inputs": [
+          {
+            "referenceName": "BlobExchangeRatesCSV",
+            "type": "DatasetReference"
+          }
+        ],
+        "outputs": [
+          {
+            "referenceName": "SqlStgExchangeRates",
+            "type": "DatasetReference"
+          }
+        ],
+        "typeProperties": {
+          "source": { "type": "DelimitedTextSource" },
+          "sink":   { "type": "AzureSqlSink", "writeBehavior": "upsert" }
+        }
+      },
+      {
+        "name": "TriggerIntermediateRefresh",
+        "type": "ExecutePipeline",
+        "typeProperties": {
+          "pipeline": {
+            "referenceName": "RefreshIntermediateLayer",
+            "type": "PipelineReference"
+          },
+          "waitOnCompletion": true
+        }
+      }
+    ]
+  }
+}

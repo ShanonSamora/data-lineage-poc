@@ -2,6 +2,8 @@
 from __future__ import annotations
 
 import json
+from pathlib import Path
+from typing import ClassVar
 
 from pydantic_settings import BaseSettings
 
@@ -26,7 +28,15 @@ class Settings(BaseSettings):
 
     # Multi-repo: JSON array of {"name": "...", "path": "...", "type": "auto"}
     # Example: REPOS='[{"name":"warehouse","path":"./repos/warehouse"},{"name":"etl","path":"./repos/etl"}]'
+    # When unset, auto-detection looks for the POC's three sibling sample dirs.
     repos: str = ""
+
+    # Convention for the POC: three sibling directories simulating three real repos.
+    _AUTO_REPOS: ClassVar[tuple[tuple[str, str, str], ...]] = (
+        ("sql", "./sample_repo_sql", "sql"),
+        ("python", "./sample_repo_python", "python"),
+        ("adf", "./sample_repo_adf", "adf"),
+    )
 
     host: str = "0.0.0.0"
     port: int = 8000
@@ -37,7 +47,11 @@ class Settings(BaseSettings):
         """
         Parse the repos config into a list of RepoSource objects.
 
-        Falls back to a single repo from ``repo_path`` if ``repos`` is empty.
+        Resolution order:
+        1. Explicit ``repos`` JSON env var (production / custom setups).
+        2. Auto-detected POC sibling dirs ``sample_repo_sql``, ``sample_repo_python``,
+           ``sample_repo_adf`` — at least one must exist.
+        3. Legacy fallback to a single repo at ``repo_path``.
         """
         if self.repos.strip():
             raw = json.loads(self.repos)
@@ -49,7 +63,15 @@ class Settings(BaseSettings):
                 )
                 for r in raw
             ]
-        # Fallback: single-repo mode
+
+        auto = [
+            RepoSource(name=name, path=path, repo_type=rtype)
+            for name, path, rtype in self._AUTO_REPOS
+            if Path(path).is_dir()
+        ]
+        if auto:
+            return auto
+
         return [RepoSource(name="default", path=self.repo_path)]
 
 

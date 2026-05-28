@@ -1,26 +1,33 @@
 """
 Pull-request lineage analyser.
 
-Given two Git refs (base and head), this module:
-1. Identifies SQL/Python files changed between the refs.
-2. Analyses each version of the changed files to produce lineage graphs.
-3. Computes a structured diff (added / removed / modified nodes & edges).
-4. Resolves downstream impact across the full repository lineage.
-5. Renders a Markdown report suitable for posting as a PR comment.
+Diffs the **full multi-repo** lineage graph between two Git refs:
+
+1. Lists changed files between base and head (used in the report).
+2. Builds the full lineage graph at HEAD (from the current working tree).
+3. Builds the full lineage graph at BASE (from a temporary ``git worktree`` at the
+   base SHA). This is what enables cross-source-repo impact analysis — a change in
+   the Python repo can flag impact in the SQL repo even though only Python files
+   were touched.
+4. Diffs the two full graphs.
+5. Collects downstream impact in the HEAD graph for each changed node.
+6. Renders a Markdown report.
 
 Can be driven from:
-  - CLI:            python main.py --pr-check --base origin/main --head HEAD
+  - CLI:            python main.py --pr-check --base origin/main --head HEAD --repo <path> ...
   - GitHub Actions: .github/workflows/lineage-check.yml
   - API:            POST /pr-check  (see src/api.py)
 """
 from __future__ import annotations
 
 import logging
+import subprocess
 import tempfile
 from pathlib import Path
 
 import git  # GitPython
 
+from src.config import RepoSource
 from src.diff import (
     ChangeType,
     LineageDiff,
@@ -31,7 +38,6 @@ from src.engine import (
     ADF_EXTENSIONS,
     PYTHON_EXTENSIONS,
     SQL_EXTENSIONS,
-    analyze_file,
     analyze_multiple_repos,
 )
 from src.models import EdgeType, LineageGraph
@@ -44,7 +50,7 @@ RELEVANT_EXTENSIONS = SQL_EXTENSIONS | PYTHON_EXTENSIONS | ADF_EXTENSIONS
 # ── Git helpers ──────────────────────────────────────────────────────
 
 def _get_changed_files(repo: git.Repo, base_ref: str, head_ref: str) -> list[str]:
-    """Return workspace-relative paths of files changed between *base_ref* and *head_ref*."""
+    """Workspace-relative paths of files changed between *base_ref* and *head_ref*."""
     diffs = repo.commit(base_ref).diff(repo.commit(head_ref))
     paths: set[str] = set()
     for d in diffs:
@@ -64,37 +70,44 @@ def _filter_relevant(paths: list[str]) -> list[str]:
         suffix = Path(p).suffix.lower()
         if suffix in SQL_EXTENSIONS | PYTHON_EXTENSIONS:
             result.append(p)
-        elif suffix == ".json":
-            # Only include JSON files that look like ADF artefacts
-            if _is_adf(Path(p)):
-                result.append(p)
+        elif suffix == ".json" and _is_adf(Path(p)):
+            result.append(p)
     return result
 
 
-def _file_content_at_ref(repo: git.Repo, ref: str, path: str) -> str | None:
-    """Return file content at a specific Git ref, or None if the file didn't exist."""
-    try:
-        blob = repo.commit(ref).tree / path
-        return blob.data_stream.read().decode("utf-8", errors="replace")
-    except (KeyError, git.exc.GitCommandError):
-        return None
+def _build_base_graph(repo_root: Path, repo_paths: list[str], base_ref: str) -> LineageGraph:
+    """Materialize the base SHA in a temporary ``git worktree`` and run multi-repo analysis."""
+    with tempfile.TemporaryDirectory() as tmp:
+        worktree = Path(tmp) / "base"
+        try:
+            subprocess.run(
+                ["git", "worktree", "add", "--detach", "--force", str(worktree), base_ref],
+                cwd=str(repo_root),
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+        except subprocess.CalledProcessError as e:
+            logger.error("git worktree add failed: %s", (e.stderr or e.stdout or "").strip())
+            return LineageGraph()
 
-
-def _analyze_content(path: str, content: str) -> LineageGraph:
-    """Write content to a temp file and run the analysis engine on it."""
-    suffix = Path(path).suffix
-    tmp_path: str | None = None
-    try:
-        with tempfile.NamedTemporaryFile(mode="w", suffix=suffix, delete=False, encoding="utf-8") as tmp:
-            tmp.write(content)
-            tmp_path = tmp.name
-        return analyze_file(tmp_path)
-    finally:
-        if tmp_path:
-            try:
-                Path(tmp_path).unlink(missing_ok=True)
-            except OSError:
-                pass
+        try:
+            base_sources = []
+            for rel in repo_paths:
+                p = worktree / rel
+                if p.is_dir():
+                    base_sources.append(RepoSource(name=Path(rel).name, path=str(p)))
+            if not base_sources:
+                logger.warning("None of the configured repo paths exist in base worktree")
+                return LineageGraph()
+            return analyze_multiple_repos(base_sources)
+        finally:
+            subprocess.run(
+                ["git", "worktree", "remove", "--force", str(worktree)],
+                cwd=str(repo_root),
+                capture_output=True,
+                text=True,
+            )
 
 
 # ── Core analysis ────────────────────────────────────────────────────
@@ -137,72 +150,69 @@ class PRAnalysisResult:
 
 
 def analyze_pr(
-    repo_path: str | Path,
+    repo_paths: list[str | Path],
     base_ref: str,
     head_ref: str,
+    repo_root: str | Path | None = None,
 ) -> PRAnalysisResult:
     """
-    Full PR lineage impact analysis.
+    Full multi-repo PR lineage impact analysis.
+
+    Builds the full lineage graph at HEAD (from the working tree) and at BASE
+    (from a temporary ``git worktree``), then diffs them.
 
     Parameters
     ----------
-    repo_path : path to the Git repository root
-    base_ref  : Git ref for the PR base (e.g. ``origin/main``)
-    head_ref  : Git ref for the PR head (e.g. ``HEAD``)
-
-    Returns
-    -------
-    PRAnalysisResult with diff details + downstream impact.
+    repo_paths : list of source-repo subdirectory paths relative to the Git root
+                 (e.g. ``["sample_repo_sql", "sample_repo_python", "sample_repo_adf"]``).
+    base_ref   : Git ref for the PR base (e.g. ``origin/main``).
+    head_ref   : Git ref for the PR head (e.g. ``HEAD``).
+    repo_root  : optional override for the Git repo root. Defaults to CWD.
     """
-    repo_path = Path(repo_path).resolve()
-    repo = git.Repo(repo_path, search_parent_directories=True)
+    repo_root_path = Path(repo_root or ".").resolve()
+    repo = git.Repo(repo_root_path, search_parent_directories=True)
+    repo_root_path = Path(repo.working_tree_dir)
 
-    # 1. Identify changed files
+    rel_paths = [str(p) for p in repo_paths]
+
+    # 1. Changed files (for the report)
     changed = _get_changed_files(repo, base_ref, head_ref)
     relevant = _filter_relevant(changed)
-    logger.info("PR %s..%s — %d changed files, %d relevant", base_ref, head_ref, len(changed), len(relevant))
+    logger.info(
+        "PR %s..%s — %d changed files, %d relevant",
+        base_ref, head_ref, len(changed), len(relevant),
+    )
 
-    if not relevant:
+    # 2. HEAD graph from current working tree
+    head_sources = []
+    for rel in rel_paths:
+        p = (repo_root_path / rel).resolve()
+        if p.is_dir():
+            head_sources.append(RepoSource(name=Path(rel).name, path=str(p)))
+    if not head_sources:
+        logger.warning("No configured repo paths exist in working tree; nothing to analyze")
         return PRAnalysisResult(
             changed_files=changed,
-            relevant_files=[],
+            relevant_files=relevant,
             diff=LineageDiff(),
             impacted_nodes=[],
             base_ref=base_ref,
             head_ref=head_ref,
         )
+    logger.info("Building HEAD graph from %d repos", len(head_sources))
+    after_graph = analyze_multiple_repos(head_sources)
 
-    # 2. Build lineage graph for each version of the changed files
-    before_graph = LineageGraph()
-    after_graph = LineageGraph()
+    # 3. BASE graph from temporary worktree
+    logger.info("Building BASE graph from git worktree at %s", base_ref)
+    before_graph = _build_base_graph(repo_root_path, rel_paths, base_ref)
 
-    for rel_path in relevant:
-        base_content = _file_content_at_ref(repo, base_ref, rel_path)
-        head_content = _file_content_at_ref(repo, head_ref, rel_path)
-
-        if base_content:
-            partial = _analyze_content(rel_path, base_content)
-            before_graph.merge(partial)
-
-        if head_content:
-            partial = _analyze_content(rel_path, head_content)
-            after_graph.merge(partial)
-
-    # 3. Compute diff
+    # 4. Diff
     diff = compute_diff(before_graph, after_graph)
 
-    # 4. If there are changes, compute downstream impact against full lineage.
-    #    When multi-repo is configured, this spans ALL repos — enabling
-    #    cross-repository impact detection.
+    # 5. Impact: BFS in the HEAD graph from each changed node
     impacted: list[str] = []
     if diff.has_changes:
-        try:
-            full_graph = analyze_multiple_repos()
-        except Exception:
-            # Fallback: use the after-graph if multi-repo scan fails
-            logger.warning("Multi-repo scan failed; falling back to local graph for impact analysis")
-            full_graph = after_graph
-        impacted = collect_impacted_nodes(diff, full_graph)
+        impacted = collect_impacted_nodes(diff, after_graph)
 
     logger.info(
         "PR analysis complete: %d node changes, %d edge changes, %d downstream impacted",

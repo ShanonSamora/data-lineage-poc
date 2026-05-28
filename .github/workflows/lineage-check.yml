@@ -4,12 +4,14 @@ on:
   pull_request:
     types: [opened, synchronize, reopened]
     paths:
-      - '**/*.sql'
-      - '**/*.ddl'
-      - '**/*.dml'
-      - '**/*.hql'
-      - '**/*.py'
-      - '**/*.pyspark'
+      # Three sibling source-repo directories (POC simulates the multi-repo case).
+      - 'sample_repo_sql/**'
+      - 'sample_repo_python/**'
+      - 'sample_repo_adf/**'
+      # Also re-run when the lineage code itself changes.
+      - 'src/**'
+      - 'main.py'
+      - '.github/workflows/lineage-check.yml'
 
 permissions:
   contents: read
@@ -42,10 +44,17 @@ jobs:
         env:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
         run: |
+          # The analyzer materialises the base SHA in a temporary `git worktree`
+          # (handled by src/pr_analyzer.py), so each of the three source repos is
+          # scanned at both base and head. This is what makes cross-source-repo
+          # impact detection work — a Python-only PR can flag SQL or ADF impact.
           python main.py \
             --pr-check \
             --base "${{ github.event.pull_request.base.sha }}" \
             --head "${{ github.event.pull_request.head.sha }}" \
+            --repo sample_repo_sql \
+            --repo sample_repo_python \
+            --repo sample_repo_adf \
             --output-file lineage-report.md
 
           # Store report for the comment step

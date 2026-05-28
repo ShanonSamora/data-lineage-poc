@@ -2,7 +2,7 @@
 -- Reporting / Mart Layer
 -- Final tables consumed by dashboards and regulatory reports
 -- Reads from SQL intermediate views AND from int_python_customer_scores,
--- the table written by the Python step (sample_repo/python/transform_pipeline.py).
+-- the table written by the Python step (sample_repo_python/transform_pipeline.py).
 -- ============================================================
 
 -- Regulatory KPI: Customer exposure report (BCBS 239 compliant)

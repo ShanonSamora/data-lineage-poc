@@ -4,7 +4,7 @@ FastAPI REST API for the Data Lineage POC.
 In-memory only — no external graph database required.
 
 Endpoints:
-  POST /analyze           — Scan sample_repo and build lineage graph
+  POST /analyze           — Scan all configured source repos and build lineage graph
   GET  /graph             — Full graph (nodes + edges)
   GET  /upstream/{id}     — Trace upstream lineage for a node
   GET  /downstream/{id}   — Trace downstream impact for a node
@@ -32,7 +32,7 @@ from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel as PydanticBaseModel
 
 from src.config import settings
-from src.engine import analyze_directory, analyze_multiple_repos
+from src.engine import analyze_multiple_repos
 from src.models import LineageGraph
 
 logger = logging.getLogger(__name__)
@@ -157,15 +157,25 @@ async def web_ui(request: Request):
 
 @app.post("/analyze")
 async def analyze_repo():
-    """Scan the configured repository, extract lineage, store in memory."""
-    global _graph
-    repo = Path(settings.repo_path)
-    if not repo.is_dir():
-        raise HTTPException(status_code=400, detail=f"Repo path not found: {repo}")
+    """Scan all configured source repositories, merge lineage, store in memory.
 
-    _graph = analyze_directory(repo)
+    With no ``REPOS`` env var, this auto-detects the POC's three sibling sample dirs
+    (``sample_repo_sql``, ``sample_repo_python``, ``sample_repo_adf``). Set ``REPOS``
+    to a JSON array to point at real repos. Falls back to ``REPO_PATH`` if neither
+    is configured.
+    """
+    global _graph
+    repo_sources = settings.get_repo_sources()
+    found = [s for s in repo_sources if Path(s.path).is_dir()]
+    if not found:
+        raise HTTPException(
+            status_code=400,
+            detail=f"No configured repo paths exist on disk: {[s.path for s in repo_sources]}",
+        )
+    _graph = analyze_multiple_repos(repo_sources)
     return {
         "status": "ok",
+        "repos_scanned": [s.name for s in found],
         "nodes_extracted": len(_graph.nodes),
         "edges_extracted": len(_graph.edges),
     }
@@ -173,16 +183,8 @@ async def analyze_repo():
 
 @app.post("/analyze-multi")
 async def analyze_multi_repo():
-    """Scan all configured repositories, merge lineage, store in memory."""
-    global _graph
-    repo_sources = settings.get_repo_sources()
-    _graph = analyze_multiple_repos(repo_sources)
-    return {
-        "status": "ok",
-        "repos_scanned": [r.name for r in repo_sources],
-        "nodes_extracted": len(_graph.nodes),
-        "edges_extracted": len(_graph.edges),
-    }
+    """Deprecated alias for ``POST /analyze`` — kept for older clients."""
+    return await analyze_repo()
 
 
 @app.get("/graph")
@@ -257,19 +259,27 @@ async def search_nodes(q: str = Query(..., min_length=1)):
 class PRCheckRequest(PydanticBaseModel):
     base_ref: str = "origin/main"
     head_ref: str = "HEAD"
-    repo_path: str | None = None
+    repo_root: str | None = None
+    repo_paths: list[str] | None = None  # source-repo subdirs to scan; falls back to configured sources
 
 
 @app.post("/pr-check")
 async def pr_check(body: PRCheckRequest):
-    """Analyse lineage impact between two Git refs."""
+    """Analyse lineage impact between two Git refs across all configured source repos."""
     from src.pr_analyzer import analyze_pr, render_markdown
 
-    repo = Path(body.repo_path).resolve() if body.repo_path else Path(".").resolve()
-    if not (repo / ".git").exists():
-        raise HTTPException(status_code=400, detail=f"Not a Git repository: {repo}")
+    repo_root = Path(body.repo_root).resolve() if body.repo_root else Path(".").resolve()
+    if not (repo_root / ".git").exists():
+        raise HTTPException(status_code=400, detail=f"Not a Git repository: {repo_root}")
 
-    result = analyze_pr(repo, body.base_ref, body.head_ref)
+    if body.repo_paths:
+        repo_paths = body.repo_paths
+    else:
+        repo_paths = [s.path for s in settings.get_repo_sources()]
+    if not repo_paths:
+        raise HTTPException(status_code=400, detail="No source repo paths resolved")
+
+    result = analyze_pr(repo_paths, body.base_ref, body.head_ref, repo_root=repo_root)
     return {
         **result.as_dict(),
         "markdown_report": render_markdown(result),

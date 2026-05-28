@@ -118,17 +118,18 @@ def _analyze_python(file_path: Path, content: str) -> LineageGraph:
     return interpret_with_llm(file_path, content)
 
 
-def analyze_directory(directory: str | Path, recursive: bool = True, source_repo: str = "") -> LineageGraph:
+def _analyze_directory_raw(directory: Path, recursive: bool, source_repo: str) -> LineageGraph:
+    """Scan a directory without running the post-pass prune.
+
+    Used internally by ``analyze_multiple_repos`` so pruning runs once on the merged
+    graph — otherwise cross-repo nodes (e.g. an LLM-detected table in the Python repo
+    that's properly schematized by the SQL repo) get dropped before they can connect.
     """
-    Scan a directory for SQL, Python, and ADF files and build a unified lineage graph.
-    """
-    directory = Path(directory)
     if not directory.is_dir():
         raise FileNotFoundError(f"Directory not found: {directory}")
 
     graph = LineageGraph()
     pattern = "**/*" if recursive else "*"
-
     scannable = SQL_EXTENSIONS | PYTHON_EXTENSIONS | ADF_EXTENSIONS
     for path in sorted(directory.glob(pattern)):
         if path.is_file() and path.suffix.lower() in scannable:
@@ -137,7 +138,15 @@ def analyze_directory(directory: str | Path, recursive: bool = True, source_repo
                 graph.merge(partial)
             except Exception as e:
                 logger.error("Failed to analyze %s: %s", path, e)
+    return graph
 
+
+def analyze_directory(directory: str | Path, recursive: bool = True, source_repo: str = "") -> LineageGraph:
+    """
+    Scan a directory for SQL, Python, and ADF files and build a unified lineage graph.
+    """
+    directory = Path(directory)
+    graph = _analyze_directory_raw(directory, recursive, source_repo)
     _prune_dead_nodes(graph)
 
     logger.info(
@@ -246,7 +255,8 @@ def analyze_multiple_repos(repo_sources: list | None = None) -> LineageGraph:
             continue
 
         logger.info("Scanning repo '%s' at %s", repo_src.name, repo_dir.resolve())
-        partial = analyze_directory(repo_dir, source_repo=repo_src.name)
+        # Skip pruning per-repo so cross-repo references survive the merge.
+        partial = _analyze_directory_raw(repo_dir, True, repo_src.name)
 
         # Tag all nodes with the source repo name
         for node in partial.nodes:
@@ -255,8 +265,84 @@ def analyze_multiple_repos(repo_sources: list | None = None) -> LineageGraph:
 
         graph.merge(partial)
 
+    # Single prune pass on the fully-merged graph.
+    _prune_dead_nodes(graph)
+
+    # Propagate columns onto raw-source ADF datasets (Blob CSV/parquet) from the
+    # staging table they copy into. Their JSON declares only file location, but
+    # in practice they carry the same schema as the sink they land in.
+    _propagate_copy_source_columns(graph)
+
     logger.info(
         "Multi-repo scan complete: %d repos → %d nodes, %d edges",
         len(repo_sources), len(graph.nodes), len(graph.edges),
     )
     return graph
+
+
+def _propagate_copy_source_columns(graph: LineageGraph) -> None:
+    """For each ADF_DATASET with no HAS_COLUMN edges, inherit columns from its COPIES_TO sink.
+
+    Raw blob datasets (CSV, parquet) declare a file location but no schema. The sink
+    they get copied into is usually a SQL-backed dataset aliased to a staging table
+    that does have a full schema. We add HAS_COLUMN edges from the source dataset
+    to those staging columns so the source dataset surfaces a schema in the UI and
+    JSON export. The propagated edges are tagged ``metadata.source = "propagated"``
+    and given confidence 0.9 so they're distinguishable from deterministic schemas.
+    """
+    from src.models import EdgeType, LineageEdge, NodeType
+
+    # Index HAS_COLUMN edges by source (the owning table/dataset).
+    has_col_by_owner: dict[str, list[str]] = {}
+    for e in graph.edges:
+        if e.edge_type == EdgeType.HAS_COLUMN:
+            has_col_by_owner.setdefault(e.source_id, []).append(e.target_id)
+
+    # Index COPIES_TO edges (source dataset -> sink dataset).
+    copies_to_by_source: dict[str, list[str]] = {}
+    for e in graph.edges:
+        if e.edge_type == EdgeType.COPIES_TO:
+            copies_to_by_source.setdefault(e.source_id, []).append(e.target_id)
+
+    # Index ADF dataset → physical table aliases (READS_FROM with the alias marker).
+    alias_for: dict[str, str] = {}
+    for e in graph.edges:
+        if e.edge_type == EdgeType.READS_FROM and "ADF dataset" in (e.transformation or ""):
+            alias_for[e.source_id] = e.target_id
+
+    new_edges: list[LineageEdge] = []
+    for node in graph.nodes:
+        if node.node_type != NodeType.ADF_DATASET:
+            continue
+        if has_col_by_owner.get(node.id):
+            continue  # already has its own columns
+        if node.id in alias_for:
+            continue  # SQL-backed datasets surface columns via alias resolution
+        # Follow COPIES_TO -> sink dataset -> (alias) -> physical table
+        for sink_id in copies_to_by_source.get(node.id, []):
+            cols = has_col_by_owner.get(sink_id) or has_col_by_owner.get(alias_for.get(sink_id, ""), [])
+            for col_id in cols:
+                new_edges.append(LineageEdge(
+                    source_id=node.id,
+                    target_id=col_id,
+                    edge_type=EdgeType.HAS_COLUMN,
+                    transformation=f"inherited from {sink_id}",
+                    confidence=0.9,
+                    metadata={"source": "propagated"},
+                ))
+
+    if new_edges:
+        # Deduplicate (source, target, type) — a Blob dataset may copy to multiple sinks.
+        seen: set[tuple[str, str, str]] = set()
+        for existing in graph.edges:
+            if existing.edge_type == EdgeType.HAS_COLUMN:
+                seen.add((existing.source_id, existing.target_id, existing.edge_type.value))
+        added = 0
+        for e in new_edges:
+            key = (e.source_id, e.target_id, e.edge_type.value)
+            if key not in seen:
+                seen.add(key)
+                graph.edges.append(e)
+                added += 1
+        if added:
+            logger.info("Propagated %d HAS_COLUMN edges to raw-source ADF datasets", added)

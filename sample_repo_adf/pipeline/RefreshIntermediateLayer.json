@@ -7,7 +7,7 @@
         "name": "RunPythonRiskScoring",
         "type": "DatabricksNotebook",
         "typeProperties": {
-          "notebookPath": "sample_repo\\python\\transform_pipeline.py",
+          "notebookPath": "sample_repo_python\\transform_pipeline.py",
           "baseParameters": {
             "target_table": "int_python_customer_scores"
           }

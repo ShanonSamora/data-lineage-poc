@@ -203,6 +203,11 @@
         .flow-card-center .flow-card-header { background: #0a1526; border-bottom-color: #1a2f54; }
         .flow-card-header.clickable { cursor: pointer; transition: background 0.12s; }
         .flow-card-header.clickable:hover { background: #0f1a30; }
+        .flow-card-alias {
+            font-size: 10px; color: #6ee7b7; padding: 4px 14px;
+            background: #062c1e; border-bottom: 1px solid #0a3a2b;
+            letter-spacing: 0.02em;
+        }
         .flow-card-title {
             font-size: 13px; font-weight: 700; color: #e2e8f0;
             white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 160px;
@@ -474,6 +479,29 @@
         if (node.id && node.id.includes('.')) return node.id.split('.')[0];
         return '';
     }
+
+    // Resolve a table/dataset's columns by consulting BOTH the column-node
+    // ``metadata.table`` field (set by the SQL parser) AND ``HAS_COLUMN`` edges
+    // (used by the engine's column-propagation post-pass to attach staging
+    // columns onto raw blob sources). Order: HAS_COLUMN edges first so propagated
+    // columns surface; then fall back to metadata-based lookup.
+    function columnsForOwner(ownerId, data) {
+        const out = new Map();
+        for (const e of data.edges) {
+            const et = e.edge_type || e.type;
+            if (et !== 'HAS_COLUMN') continue;
+            if (edgeSource(e) !== ownerId) continue;
+            const colId = edgeTarget(e);
+            const colNode = data.nodes.find(n => n.id === colId && n.node_type === 'COLUMN');
+            if (colNode) out.set(colId, colNode);
+        }
+        for (const n of data.nodes) {
+            if (n.node_type !== 'COLUMN') continue;
+            if (out.has(n.id)) continue;
+            if (getColumnTableName(n) === ownerId) out.set(n.id, n);
+        }
+        return Array.from(out.values());
+    }
     function getLlmSubgraph(data) {
         const llmEdges = data.edges.filter(isLlmEdge);
         const nodeIds = new Set();
@@ -553,11 +581,33 @@
         for (const n of data.nodes) {
             if (isTableLike(n)) tableMap.set(n.id, { id: n.id, name: n.name || n.id, type: n.node_type, columns: [] });
         }
+        // Walk HAS_COLUMN edges so propagated columns (raw-source ADF datasets) surface.
+        const seenCol = new Set();
+        for (const e of data.edges) {
+            if ((e.edge_type || e.type) !== 'HAS_COLUMN') continue;
+            const ownerId = edgeSource(e);
+            const colId = edgeTarget(e);
+            const colNode = data.nodes.find(n => n.id === colId && n.node_type === 'COLUMN');
+            if (!colNode) continue;
+            if (!tableMap.has(ownerId)) {
+                const ownerNode = data.nodes.find(n => n.id === ownerId);
+                if (!ownerNode || !isTableLike(ownerNode)) continue;
+                tableMap.set(ownerId, { id: ownerId, name: ownerNode.name || ownerId, type: ownerNode.node_type, columns: [] });
+            }
+            const pair = ownerId + '|' + colId;
+            if (seenCol.has(pair)) continue;
+            seenCol.add(pair);
+            tableMap.get(ownerId).columns.push(colNode);
+        }
+        // Metadata-based fallback for columns with no HAS_COLUMN edge of their own.
         for (const n of data.nodes) {
             if (n.node_type !== 'COLUMN') continue;
             const tbl = getColumnTableName(n);
             if (!tbl) continue;
             if (!tableMap.has(tbl)) tableMap.set(tbl, { id: tbl, name: tbl, type: 'TABLE', columns: [] });
+            const pair = tbl + '|' + n.id;
+            if (seenCol.has(pair)) continue;
+            seenCol.add(pair);
             tableMap.get(tbl).columns.push(n);
         }
 
@@ -789,8 +839,7 @@
     function initFlowTableEntry(map, tableId, data) {
         const tableNode = data.nodes.find(n => n.id === tableId && isTableLike(n))
             || { id: tableId, name: tableId, node_type: 'TABLE' };
-        const columns = data.nodes
-            .filter(n => n.node_type === 'COLUMN' && getColumnTableName(n) === tableId)
+        const columns = columnsForOwner(tableId, data)
             .sort((a, b) => (a.name || a.id).localeCompare(b.name || b.id));
         map.set(tableId, { tableNode, columns, connections: [] });
     }
@@ -806,9 +855,22 @@
         const centerTableNode = data.nodes.find(n => n.id === centerTableId && isTableLike(n))
             || { id: centerTableId, name: centerTableId, node_type: 'TABLE' };
 
-        const centerCols = data.nodes
-            .filter(n => n.node_type === 'COLUMN' && getColumnTableName(n) === centerTableId)
+        const centerCols = columnsForOwner(centerTableId, data)
             .sort((a, b) => (a.name || a.id).localeCompare(b.name || b.id));
+
+        // Build the ADF dataset ↔ physical table alias map. Both ends point at each other,
+        // so edges anchored at either side count as anchored at the same logical entity.
+        const aliasOf = new Map();
+        for (const e of data.edges) {
+            const et = e.edge_type || e.type || '';
+            if (et === 'READS_FROM' && (e.transformation || '').includes('ADF dataset')) {
+                const s = edgeSource(e), t = edgeTarget(e);
+                aliasOf.set(s, t);
+                aliasOf.set(t, s);
+            }
+        }
+        const centerAlias = aliasOf.get(centerTableId);
+        const isCenterAnchor = (id) => id === centerTableId || (centerAlias && id === centerAlias);
 
         const upMap = new Map();
         const downMap = new Map();
@@ -839,31 +901,66 @@
                 }
             } else if (et === 'READS_FROM') {
                 // Backward-pointing: consumer (src) reads from producer (tgt).
-                if (src === centerTableId && tgt !== centerTableId) {
+                if (isCenterAnchor(src) && !isCenterAnchor(tgt)) {
                     if (!upMap.has(tgt)) initFlowTableEntry(upMap, tgt, data);
-                } else if (tgt === centerTableId && src !== centerTableId) {
+                } else if (isCenterAnchor(tgt) && !isCenterAnchor(src)) {
                     if (!downMap.has(src)) initFlowTableEntry(downMap, src, data);
                 }
             } else if (et === 'WRITES_TO' || et === 'COPIES_TO' || et === 'TRIGGERS') {
                 // Forward-pointing: producer (src) writes/copies/triggers consumer (tgt).
-                if (src === centerTableId && tgt !== centerTableId) {
+                if (isCenterAnchor(src) && !isCenterAnchor(tgt)) {
                     if (!downMap.has(tgt)) initFlowTableEntry(downMap, tgt, data);
-                } else if (tgt === centerTableId && src !== centerTableId) {
+                } else if (isCenterAnchor(tgt) && !isCenterAnchor(src)) {
                     if (!upMap.has(src)) initFlowTableEntry(upMap, src, data);
                 }
             }
         }
 
+        // Collapse aliased pairs: an ADF_DATASET and its aliased physical TABLE/VIEW
+        // are the same entity. If both end up visible, hide the dataset and stamp its
+        // name onto the table as a small subtitle.
+        function collapseAliasedDatasets(map, otherMap) {
+            const toRemove = [];
+            for (const [id, entry] of map.entries()) {
+                if (entry.tableNode.node_type !== 'ADF_DATASET') continue;
+                const partnerId = aliasOf.get(id);
+                if (!partnerId) continue;
+                let survivor = null;
+                if (partnerId === centerTableId) {
+                    // Surviving entry is the center card — we'll stash the label below.
+                    centerAliasLabel.add(entry.tableNode.name || id);
+                    survivor = 'center';
+                } else if (map.has(partnerId)) {
+                    survivor = map.get(partnerId);
+                } else if (otherMap.has(partnerId)) {
+                    survivor = otherMap.get(partnerId);
+                }
+                if (survivor) {
+                    if (survivor !== 'center') {
+                        survivor.aliasLabels = survivor.aliasLabels || new Set();
+                        survivor.aliasLabels.add(entry.tableNode.name || id);
+                    }
+                    toRemove.push(id);
+                }
+            }
+            for (const id of toRemove) map.delete(id);
+        }
+
+        const centerAliasLabel = new Set();
+        collapseAliasedDatasets(upMap, downMap);
+        collapseAliasedDatasets(downMap, upMap);
+
         return {
             centerTableId,
             centerTableNode,
             centerCols,
+            centerAliasLabel: centerAliasLabel.size ? Array.from(centerAliasLabel).join(', ') : '',
             upstream: Array.from(upMap.values()),
             downstream: Array.from(downMap.values()),
         };
     }
 
-    function renderFlowCard(tableNode, columns, connections, role) {
+    function renderFlowCard(tableNode, columns, connections, role, aliasLabel) {
         const nt = (tableNode.node_type || 'TABLE').toLowerCase();
         const isCenter = role === 'center';
         const connectedColIds = new Set(connections.map(c =>
@@ -889,12 +986,17 @@
             ? `<div class="flow-col-more">+${columns.length - maxCols} more columns</div>`
             : '';
 
+        const aliasHtml = aliasLabel
+            ? `<div class="flow-card-alias" title="ADF dataset alias">via ADF: ${escHtml(aliasLabel)}</div>`
+            : '';
+
         const cardClass = isCenter ? 'flow-card flow-card-center' : 'flow-card';
         return `<div class="${cardClass}">
             <div class="flow-card-header ${headerClass}" ${navigateAttr}>
                 <div class="flow-card-title" title="${escAttr(tableNode.name || tableNode.id)}">${escHtml(tableNode.name || tableNode.id)}</div>
                 <span class="flow-card-type type-${nt}">${(tableNode.node_type || 'TABLE').replace('_', ' ')}</span>
             </div>
+            ${aliasHtml}
             <div class="flow-card-columns">${colsHtml}${moreHtml}</div>
             ${!isCenter ? `<div class="flow-card-nav" onclick="navigateFlowTo('${escAttr(tableNode.id)}')">
                 Focus this table →
@@ -939,7 +1041,8 @@
             if (header) upEl.appendChild(header);
             for (const entry of fd.upstream) {
                 const div = document.createElement('div');
-                div.innerHTML = renderFlowCard(entry.tableNode, entry.columns, entry.connections, 'upstream');
+                const aliasLabel = entry.aliasLabels ? Array.from(entry.aliasLabels).join(', ') : '';
+                div.innerHTML = renderFlowCard(entry.tableNode, entry.columns, entry.connections, 'upstream', aliasLabel);
                 upEl.appendChild(div.firstElementChild);
             }
             if (!fd.upstream.length) {
@@ -961,7 +1064,7 @@
                 ...fd.downstream.flatMap(e => e.connections.map(c => c.centerColId)),
             ]);
             const div = document.createElement('div');
-            div.innerHTML = renderFlowCard(fd.centerTableNode, fd.centerCols, Array.from(allConnectedCols), 'center');
+            div.innerHTML = renderFlowCard(fd.centerTableNode, fd.centerCols, Array.from(allConnectedCols), 'center', fd.centerAliasLabel);
             centerEl.appendChild(div.firstElementChild);
         }
 
@@ -973,7 +1076,8 @@
             if (header) downEl.appendChild(header);
             for (const entry of fd.downstream) {
                 const div = document.createElement('div');
-                div.innerHTML = renderFlowCard(entry.tableNode, entry.columns, entry.connections, 'downstream');
+                const aliasLabel = entry.aliasLabels ? Array.from(entry.aliasLabels).join(', ') : '';
+                div.innerHTML = renderFlowCard(entry.tableNode, entry.columns, entry.connections, 'downstream', aliasLabel);
                 downEl.appendChild(div.firstElementChild);
             }
             if (!fd.downstream.length) {
@@ -1296,15 +1400,17 @@
             const direct = (adjOut[n.id] || []).concat(adjIn[n.id] || []);
             let columns;
             if (n.node_type === 'TABLE' || n.node_type === 'VIEW') {
-                columns = allData.nodes
-                    .filter(c => c.node_type === 'COLUMN' && getColumnTableName(c) === n.id)
-                    .map(c => c.id);
-            } else if (n.node_type === 'ADF_DATASET' && aliasedTable[n.id]) {
-                // Surface the aliased table's columns so the dataset has searchable schema.
-                const tableId = aliasedTable[n.id];
-                columns = allData.nodes
-                    .filter(c => c.node_type === 'COLUMN' && getColumnTableName(c) === tableId)
-                    .map(c => c.id);
+                columns = columnsForOwner(n.id, allData).map(c => c.id);
+            } else if (n.node_type === 'ADF_DATASET') {
+                // Aliased SQL-backed datasets surface the physical table's columns;
+                // raw blob datasets surface the columns propagated by the engine
+                // (HAS_COLUMN edges to staging columns). columnsForOwner handles both.
+                const own = columnsForOwner(n.id, allData).map(c => c.id);
+                const aliasCols = aliasedTable[n.id]
+                    ? columnsForOwner(aliasedTable[n.id], allData).map(c => c.id)
+                    : [];
+                const merged = Array.from(new Set([...own, ...aliasCols]));
+                columns = merged.length ? merged : undefined;
             }
             const result = {
                 id: n.id,

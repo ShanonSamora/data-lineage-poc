@@ -7,8 +7,8 @@ import pytest
 from src.engine import (
     _needs_llm_fallback,
     _prune_dead_nodes,
-    analyze_directory,
     analyze_file,
+    analyze_multiple_repos,
 )
 from src.models import EdgeType, LineageEdge, LineageGraph, LineageNode, NodeType
 
@@ -181,16 +181,16 @@ def test_prune_keeps_deterministic_tables_without_columns():
     assert "other_tbl" in ids
 
 
-# ── analyze_directory ─────────────────────────────────────────────────
+# ── analyze_multiple_repos ────────────────────────────────────────────
 
-def test_analyze_directory_produces_non_empty_graph():
-    """The real sample_repo produces a graph with the expected order of magnitude."""
-    g = analyze_directory("sample_repo")
+def test_analyze_multi_repo_produces_non_empty_graph():
+    """The three sibling sample dirs produce a graph with the expected order of magnitude."""
+    g = analyze_multiple_repos()  # auto-detects sample_repo_sql/python/adf
     assert len(g.nodes) > 100, f"expected >100 nodes, got {len(g.nodes)}"
     assert len(g.edges) > 100, f"expected >100 edges, got {len(g.edges)}"
 
     node_types = {n.node_type for n in g.nodes}
-    # We expect multi-language coverage
+    # We expect multi-language coverage across the three source repos.
     assert NodeType.TABLE in node_types
     assert NodeType.VIEW in node_types
     assert NodeType.COLUMN in node_types
@@ -198,11 +198,39 @@ def test_analyze_directory_produces_non_empty_graph():
     assert NodeType.ADF_DATASET in node_types
 
 
-def test_analyze_directory_merges_without_duplicate_nodes():
-    """Running analyze on the same dir twice doesn't double-count via merge."""
-    g = analyze_directory("sample_repo")
+def test_analyze_multi_repo_merges_without_duplicate_nodes():
+    """The merge across three sibling repos doesn't double-count by ID."""
+    g = analyze_multiple_repos()
     ids = [n.id for n in g.nodes]
-    assert len(ids) == len(set(ids)), "duplicate node IDs after analyze"
+    assert len(ids) == len(set(ids)), "duplicate node IDs after multi-repo merge"
+
+
+def test_analyze_multi_repo_tags_source_repo():
+    """Every node tagged with the source repo name it came from."""
+    g = analyze_multiple_repos()
+    repos = {n.source_repo for n in g.nodes if n.source_repo}
+    # At least the three known repos show up (resolved-from aliases may have empty source_repo)
+    assert {"sql", "python", "adf"}.issubset(repos), f"got source repos {repos}"
+
+
+def test_blob_dataset_inherits_columns_from_copy_sink():
+    """A Blob ADF dataset (no native schema) inherits the staging table's columns
+    via the COPIES_TO edge to its SQL-backed sink dataset.
+
+    This makes raw-data sources display a schema in the catalog / Flow View.
+    """
+    g = analyze_multiple_repos()
+    blob_has_col = [
+        e for e in g.edges
+        if e.edge_type == EdgeType.HAS_COLUMN
+        and e.source_id == "adf.dataset.BlobCustomersCSV"
+    ]
+    assert blob_has_col, "BlobCustomersCSV must inherit columns from its copy sink"
+    # All inherited edges point at stg_customers columns (the alias target of SqlStgCustomers).
+    assert all(e.target_id.startswith("stg_customers.") for e in blob_has_col), \
+        f"unexpected propagation targets: {[e.target_id for e in blob_has_col]}"
+    # And they're tagged as propagated (not deterministic schema).
+    assert all((e.metadata or {}).get("source") == "propagated" for e in blob_has_col)
 
 
 def test_analyze_unsupported_file_type_returns_empty(tmp_path):

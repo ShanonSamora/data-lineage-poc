@@ -33,13 +33,13 @@ SELECT
             ELSE 0
         END
     )                                           AS daily_net_amount,
-    SUM(
+    ROUND(SUM(
         CASE
             WHEN t.transaction_type = 'CREDIT' THEN t.amount * er.rate
             WHEN t.transaction_type = 'DEBIT'  THEN -t.amount * er.rate
             ELSE 0
         END
-    )                                           AS daily_net_amount_usd
+    ), 2)                                       AS daily_net_amount_usd
 FROM stg_transactions t
 LEFT JOIN stg_exchange_rates er
     ON er.rate_date = CAST(t.transaction_date AS DATE)

@@ -20,7 +20,7 @@ JOIN stg_accounts a ON a.customer_id = c.customer_id
 JOIN stg_branches b ON b.branch_id = a.branch_id;
 
 
--- Daily account balances with USD normalization
+-- Daily account balances with USD normalization (USD amounts rounded to 2 dp)
 CREATE VIEW int_daily_balances AS
 SELECT
     t.account_id,

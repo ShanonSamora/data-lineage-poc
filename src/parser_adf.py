@@ -24,6 +24,7 @@ from src.models import (
     LineageNode,
     NodeType,
 )
+from src.paths import file_node_id, repo_relative_path
 
 logger = logging.getLogger(__name__)
 
@@ -42,7 +43,12 @@ def is_adf_file(file_path: Path) -> bool:
     return bool(parts & _ADF_FOLDERS)
 
 
-def parse_adf_file(file_path: Path, content: str | None = None, source_repo: str = "") -> LineageGraph:
+def parse_adf_file(
+    file_path: Path,
+    content: str | None = None,
+    source_repo: str = "",
+    repo_root: str | Path | None = None,
+) -> LineageGraph:
     """
     Parse a single ADF JSON file and extract lineage.
 
@@ -65,11 +71,11 @@ def parse_adf_file(file_path: Path, content: str | None = None, source_repo: str
     folder = _artefact_folder(file_path)
 
     if folder == "pipeline":
-        return _parse_pipeline(doc, file_path, source_repo)
+        return _parse_pipeline(doc, file_path, source_repo, repo_root)
     elif folder == "dataset":
-        return _parse_dataset(doc, file_path, source_repo)
+        return _parse_dataset(doc, file_path, source_repo, repo_root)
     elif folder == "dataflow":
-        return _parse_dataflow(doc, file_path, source_repo)
+        return _parse_dataflow(doc, file_path, source_repo, repo_root)
     else:
         return LineageGraph()
 
@@ -98,9 +104,10 @@ def _ref_name(ref: dict) -> str:
 
 # ── Pipeline parsing ─────────────────────────────────────────────────
 
-def _parse_pipeline(doc: dict, file_path: Path, source_repo: str) -> LineageGraph:
+def _parse_pipeline(doc: dict, file_path: Path, source_repo: str, repo_root: str | Path | None = None) -> LineageGraph:
     graph = LineageGraph()
     pipeline_name = _safe_name(doc, file_path.name)
+    file_id = file_node_id(file_path, repo_root, source_repo, prefix="file:")
 
     # Pipeline node
     pipeline_node = LineageNode(
@@ -108,13 +115,13 @@ def _parse_pipeline(doc: dict, file_path: Path, source_repo: str) -> LineageGrap
         name=pipeline_name,
         node_type=NodeType.ADF_PIPELINE,
         source_repo=source_repo,
-        metadata={"file": str(file_path)},
+        metadata={"file": file_id},
     )
     graph.nodes.append(pipeline_node)
 
     # File node
     file_node = LineageNode(
-        id=f"file:{file_path}",
+        id=file_id,
         name=file_path.name,
         node_type=NodeType.FILE,
         source_repo=source_repo,
@@ -312,7 +319,7 @@ def _parse_stored_proc_activity(activity: dict, pipeline_name: str, graph: Linea
 
 # ── Dataset parsing ──────────────────────────────────────────────────
 
-def _parse_dataset(doc: dict, file_path: Path, source_repo: str) -> LineageGraph:
+def _parse_dataset(doc: dict, file_path: Path, source_repo: str, repo_root: str | Path | None = None) -> LineageGraph:
     graph = LineageGraph()
     ds_name = _safe_name(doc, file_path.name)
 
@@ -321,7 +328,7 @@ def _parse_dataset(doc: dict, file_path: Path, source_repo: str) -> LineageGraph
         name=ds_name,
         node_type=NodeType.ADF_DATASET,
         source_repo=source_repo,
-        metadata={"file": str(file_path)},
+        metadata={"file": repo_relative_path(file_path, repo_root)},
     )
     graph.nodes.append(node)
 
@@ -354,7 +361,7 @@ def _parse_dataset(doc: dict, file_path: Path, source_repo: str) -> LineageGraph
 
 # ── Dataflow parsing ─────────────────────────────────────────────────
 
-def _parse_dataflow(doc: dict, file_path: Path, source_repo: str) -> LineageGraph:
+def _parse_dataflow(doc: dict, file_path: Path, source_repo: str, repo_root: str | Path | None = None) -> LineageGraph:
     graph = LineageGraph()
     df_name = _safe_name(doc, file_path.name)
 
@@ -363,7 +370,7 @@ def _parse_dataflow(doc: dict, file_path: Path, source_repo: str) -> LineageGrap
         name=df_name,
         node_type=NodeType.ADF_DATAFLOW,
         source_repo=source_repo,
-        metadata={"file": str(file_path)},
+        metadata={"file": repo_relative_path(file_path, repo_root)},
     )
     graph.nodes.append(df_node)
 

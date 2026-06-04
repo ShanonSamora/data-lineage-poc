@@ -152,7 +152,7 @@ Quick mental recap:
 ## Backup plans
 
 - **If the server doesn't start**: open `docs/validation.md` and walk through the metrics tables instead. The numbers are the same.
-- **If `Analyze` returns 0 nodes**: check `REPO_PATH` in `.env` (should be `./sample_repo`), then click Analyze again.
+- **If `Analyze` returns 0 nodes**: confirm the `sample_repo_sql/`, `sample_repo_python/`, and `sample_repo_adf/` folders are present (the engine auto-detects them), then click Analyze again.
 - **If LLM is unreachable**: the deterministic part still works. Mention the degradation explicitly and proceed — the SQL/ADF lineage is the bulk of the graph anyway.
 - **If a column click crashes**: refresh, click Analyze, retry. Worst case, open the JSON file directly to show the data is there.
 

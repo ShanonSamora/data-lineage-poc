@@ -25,6 +25,7 @@ from src.models import (
     LineageNode,
     NodeType,
 )
+from src.paths import file_node_id, repo_relative_path
 
 logger = logging.getLogger(__name__)
 
@@ -88,18 +89,27 @@ Return empty arrays if no lineage can be determined.
 """
 
 
-def interpret_with_llm(file_path: str | Path, code: str) -> LineageGraph:
+def interpret_with_llm(
+    file_path: str | Path,
+    code: str,
+    source_repo: str = "",
+    repo_root: str | Path | None = None,
+) -> LineageGraph:
     """
     Send code to an LLM and parse the structured lineage response.
 
     Args:
         file_path: Path to the source file (for metadata).
         code: Source code content to analyze.
+        source_repo: Repo name used to build a stable, relative FILE-node ID.
+        repo_root: Root the FILE-node ID is made relative to (see ``src.paths``).
 
     Returns:
         LineageGraph with LLM-inferred nodes and edges.
     """
     graph = LineageGraph()
+    file_id = file_node_id(file_path, repo_root, source_repo)
+    file_rel = repo_relative_path(file_path, repo_root)
 
     if not settings.openai_api_key or settings.openai_api_key.startswith("sk-your"):
         logger.warning("OpenAI API key not configured — skipping LLM interpretation for %s", file_path)
@@ -146,10 +156,10 @@ def interpret_with_llm(file_path: str | Path, code: str) -> LineageGraph:
 
     # Build graph from LLM response
     file_node = LineageNode(
-        id=str(file_path),
+        id=file_id,
         name=Path(file_path).name,
         node_type=NodeType.FILE,
-        metadata={"path": str(file_path)},
+        metadata={"path": file_rel},
     )
     graph.nodes.append(file_node)
 
@@ -166,11 +176,11 @@ def interpret_with_llm(file_path: str | Path, code: str) -> LineageGraph:
             id=name,
             name=name,
             node_type=ntype,
-            metadata={"file": str(file_path), "source": "llm"},
+            metadata={"file": file_rel, "source": "llm"},
         ))
         graph.edges.append(LineageEdge(
             source_id=name,
-            target_id=str(file_path),
+            target_id=file_id,
             edge_type=EdgeType.DEFINED_IN,
         ))
 
@@ -242,7 +252,7 @@ def interpret_with_llm(file_path: str | Path, code: str) -> LineageGraph:
                     id=name,
                     name=name,
                     node_type=NodeType.TABLE,
-                    metadata={"file": str(file_path), "source": "llm"},
+                    metadata={"file": file_rel, "source": "llm"},
                 ))
                 existing_node_ids.add(name)
 

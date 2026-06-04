@@ -57,11 +57,18 @@ jobs:
             --repo sample_repo_adf \
             --output-file lineage-report.md
 
-          # Store report for the comment step
+          # Store report for the comment step.
+          #   * The delimiter is a random token (not 'EOF') so it can't collide with
+          #     an 'EOF' line inside a SQL/stored-procedure transformation string.
+          #   * The explicit `echo ""` guarantees the report ends with a newline, so
+          #     the closing delimiter is always on its own line. Without it, a report
+          #     with no trailing newline merges into the delimiter line and GitHub
+          #     Actions fails with "Matching delimiter not found".
           {
-            echo 'REPORT<<EOF'
+            echo 'REPORT<<LINEAGE_REPORT_EOF_d83a17'
             cat lineage-report.md
-            echo 'EOF'
+            echo ""
+            echo 'LINEAGE_REPORT_EOF_d83a17'
           } >> "$GITHUB_OUTPUT"
 
       - name: Build degraded report if analysis failed
@@ -77,9 +84,10 @@ jobs:
           The deterministic SQL and ADF lineage analysis does **not** require the LLM, so the failure typically points to a Python file or stored procedure that hit the LLM fallback.
           EOF
           {
-            echo 'REPORT<<EOF'
+            echo 'REPORT<<LINEAGE_REPORT_EOF_d83a17'
             cat lineage-report.md
-            echo 'EOF'
+            echo ""
+            echo 'LINEAGE_REPORT_EOF_d83a17'
           } >> "$GITHUB_OUTPUT"
 
       - name: Find existing comment

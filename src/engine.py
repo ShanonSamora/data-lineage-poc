@@ -14,6 +14,7 @@ Strategy:
 """
 from __future__ import annotations
 
+import hashlib
 import logging
 import re
 from pathlib import Path
@@ -22,8 +23,16 @@ from src.models import LineageGraph
 from src.parser_sql import parse_sql_file
 from src.parser_llm import interpret_with_llm
 from src.parser_adf import is_adf_file, parse_adf_file
+from src.paths import repo_relative_path
 
 logger = logging.getLogger(__name__)
+
+# A shared per-run cache maps (source_repo, relative_path, content_hash) → LineageGraph.
+# Used by the PR analyser so an unchanged file is analysed once and reused for both the
+# base and head graphs. This both halves LLM cost and — critically — eliminates phantom
+# diffs from LLM non-determinism: the same file content always yields the identical
+# sub-graph instead of two slightly different LLM paraphrases.
+FileCache = dict
 
 # SQL constructs that signal the deterministic parser may be insufficient.
 # These patterns are matched with case-insensitive word boundaries to avoid
@@ -69,31 +78,60 @@ def _needs_llm_fallback(sql_text: str, deterministic_graph: LineageGraph) -> boo
     return False
 
 
-def analyze_file(file_path: str | Path, source_repo: str = "") -> LineageGraph:
+def analyze_file(
+    file_path: str | Path,
+    source_repo: str = "",
+    repo_root: str | Path | None = None,
+    cache: FileCache | None = None,
+) -> LineageGraph:
     """
     Analyze a single file and return its lineage graph.
 
     Uses the hybrid strategy: deterministic first, LLM fallback when needed.
+
+    ``repo_root`` makes FILE-node IDs relative (stable across machines / worktrees).
+    ``cache`` (optional) memoises results by file content so an unchanged file is
+    analysed once — see ``FileCache``.
     """
     file_path = Path(file_path)
     suffix = file_path.suffix.lower()
-    content = file_path.read_text(encoding="utf-8", errors="replace")
-
-    if suffix in SQL_EXTENSIONS:
-        return _analyze_sql(file_path, content)
-    elif suffix in PYTHON_EXTENSIONS:
-        return _analyze_python(file_path, content)
-    elif suffix in ADF_EXTENSIONS and is_adf_file(file_path):
-        return parse_adf_file(file_path, content, source_repo=source_repo)
-    else:
+    if suffix not in ALL_EXTENSIONS:
         logger.debug("Skipping unsupported file type: %s", file_path)
         return LineageGraph()
 
+    content = file_path.read_text(encoding="utf-8", errors="replace")
 
-def _analyze_sql(file_path: Path, content: str) -> LineageGraph:
+    cache_key = None
+    if cache is not None:
+        rel = repo_relative_path(file_path, repo_root)
+        digest = hashlib.sha256(content.encode("utf-8")).hexdigest()
+        cache_key = (source_repo, rel, digest)
+        hit = cache.get(cache_key)
+        if hit is not None:
+            logger.debug("Cache hit for %s", rel)
+            return hit.model_copy(deep=True)
+
+    if suffix in SQL_EXTENSIONS:
+        result = _analyze_sql(file_path, content, source_repo, repo_root)
+    elif suffix in PYTHON_EXTENSIONS:
+        result = _analyze_python(file_path, content, source_repo, repo_root)
+    elif suffix in ADF_EXTENSIONS and is_adf_file(file_path):
+        result = parse_adf_file(file_path, content, source_repo=source_repo, repo_root=repo_root)
+    else:
+        logger.debug("Skipping unsupported file type: %s", file_path)
+        result = LineageGraph()
+
+    if cache_key is not None:
+        cache[cache_key] = result.model_copy(deep=True)
+    return result
+
+
+def _analyze_sql(
+    file_path: Path, content: str, source_repo: str = "", repo_root: str | Path | None = None
+) -> LineageGraph:
     """Hybrid analysis for SQL files."""
     # Step 1: deterministic parse
-    det_graph = parse_sql_file(file_path, content)
+    det_graph = parse_sql_file(file_path, content, source_repo, repo_root)
     logger.info(
         "Deterministic parse of %s: %d nodes, %d edges",
         file_path.name, len(det_graph.nodes), len(det_graph.edges),
@@ -102,7 +140,7 @@ def _analyze_sql(file_path: Path, content: str) -> LineageGraph:
     # Step 2: check if LLM fallback is needed
     if _needs_llm_fallback(content, det_graph):
         logger.info("LLM fallback triggered for %s", file_path.name)
-        llm_graph = interpret_with_llm(file_path, content)
+        llm_graph = interpret_with_llm(file_path, content, source_repo, repo_root)
         det_graph.merge(llm_graph)
         logger.info(
             "After LLM merge: %d nodes, %d edges",
@@ -112,13 +150,17 @@ def _analyze_sql(file_path: Path, content: str) -> LineageGraph:
     return det_graph
 
 
-def _analyze_python(file_path: Path, content: str) -> LineageGraph:
+def _analyze_python(
+    file_path: Path, content: str, source_repo: str = "", repo_root: str | Path | None = None
+) -> LineageGraph:
     """Python files always require LLM interpretation."""
     logger.info("Sending Python file to LLM: %s", file_path.name)
-    return interpret_with_llm(file_path, content)
+    return interpret_with_llm(file_path, content, source_repo, repo_root)
 
 
-def _analyze_directory_raw(directory: Path, recursive: bool, source_repo: str) -> LineageGraph:
+def _analyze_directory_raw(
+    directory: Path, recursive: bool, source_repo: str, cache: FileCache | None = None
+) -> LineageGraph:
     """Scan a directory without running the post-pass prune.
 
     Used internally by ``analyze_multiple_repos`` so pruning runs once on the merged
@@ -134,19 +176,23 @@ def _analyze_directory_raw(directory: Path, recursive: bool, source_repo: str) -
     for path in sorted(directory.glob(pattern)):
         if path.is_file() and path.suffix.lower() in scannable:
             try:
-                partial = analyze_file(path, source_repo=source_repo)
+                # FILE-node IDs are made relative to the repo directory so they're
+                # stable across the base/head worktrees compared during a PR check.
+                partial = analyze_file(path, source_repo=source_repo, repo_root=directory, cache=cache)
                 graph.merge(partial)
             except Exception as e:
                 logger.error("Failed to analyze %s: %s", path, e)
     return graph
 
 
-def analyze_directory(directory: str | Path, recursive: bool = True, source_repo: str = "") -> LineageGraph:
+def analyze_directory(
+    directory: str | Path, recursive: bool = True, source_repo: str = "", cache: FileCache | None = None
+) -> LineageGraph:
     """
     Scan a directory for SQL, Python, and ADF files and build a unified lineage graph.
     """
     directory = Path(directory)
-    graph = _analyze_directory_raw(directory, recursive, source_repo)
+    graph = _analyze_directory_raw(directory, recursive, source_repo, cache)
     _prune_dead_nodes(graph)
 
     logger.info(
@@ -230,13 +276,18 @@ def _prune_dead_nodes(graph: LineageGraph) -> None:
         logger.info("Pruned %d dead/schemaless nodes (and their incident edges)", total_pruned)
 
 
-def analyze_multiple_repos(repo_sources: list | None = None) -> LineageGraph:
+def analyze_multiple_repos(
+    repo_sources: list | None = None, cache: FileCache | None = None
+) -> LineageGraph:
     """
     Scan multiple repositories and merge their lineage into a unified graph.
 
     Parameters
     ----------
     repo_sources : list of RepoSource objects (from config). If None, reads from settings.
+    cache : optional per-run file cache (see ``FileCache``). Pass the *same* cache
+            object when building both the base and head graphs of a PR check so
+            unchanged files are analysed once and produce identical sub-graphs.
 
     Returns
     -------
@@ -256,7 +307,7 @@ def analyze_multiple_repos(repo_sources: list | None = None) -> LineageGraph:
 
         logger.info("Scanning repo '%s' at %s", repo_src.name, repo_dir.resolve())
         # Skip pruning per-repo so cross-repo references survive the merge.
-        partial = _analyze_directory_raw(repo_dir, True, repo_src.name)
+        partial = _analyze_directory_raw(repo_dir, True, repo_src.name, cache)
 
         # Tag all nodes with the source repo name
         for node in partial.nodes:

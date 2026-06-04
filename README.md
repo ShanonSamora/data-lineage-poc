@@ -72,10 +72,11 @@ pip install -e .
 ### 2. Verify install
 
 ```bash
-# Should print ~152 nodes, ~248 edges
-python -c "from src.engine import analyze_directory; g = analyze_directory('sample_repo'); print(len(g.nodes), 'nodes,', len(g.edges), 'edges')"
+# Analyze the bundled sample repos — deterministic, no API key needed.
+# Should print ~131 nodes, ~221 edges (the LLM fallback adds more once enabled).
+python -c "from src.config import settings; from src.engine import analyze_multiple_repos; g = analyze_multiple_repos(settings.get_repo_sources()); print(len(g.nodes), 'nodes,', len(g.edges), 'edges')"
 
-# Run the test suite (~63 tests, all should pass)
+# Run the test suite (77 tests, all should pass)
 pytest -q
 ```
 
@@ -96,11 +97,8 @@ No external database required — the graph lives in memory. Without `OPENAI_API
 ### 4. CLI Mode (no server)
 
 ```bash
-# Print full lineage as JSON to stdout
+# Analyze all configured source repos → print full lineage as JSON to stdout
 python main.py --analyze
-
-# Multi-repo analysis
-python main.py --analyze-multi
 
 # PR impact check (requires Git repo)
 python main.py --pr-check --base origin/main --head HEAD
@@ -133,18 +131,17 @@ data-lineage-poc/
 │   └── templates/
 │       └── index.html       # Web UI (single-page, Flow View + vis.js)
 │
-├── sample_repo/             # Example data warehouse to analyze
-│   ├── sql/
-│   │   ├── 01_staging_tables.sql       # Raw source tables (stg_*)
-│   │   ├── 02_intermediate_views.sql   # Business logic layer (int_*)
-│   │   ├── 03_reporting_tables.sql     # Reporting mart (rpt_*)
-│   │   └── 04_stored_procedures.sql    # Stored proc (LLM-only)
-│   ├── python/
-│   │   └── transform_pipeline.py       # Pandas pipeline (reads stg_*, writes rpt_*)
-│   └── adf/                            # Azure Data Factory artifacts
-│       ├── pipeline/                   # ADF pipeline definitions
-│       ├── dataset/                    # ADF dataset definitions
-│       └── dataflow/                   # ADF dataflow definitions
+# Three sibling sample repos simulate the multi-repo case (SQL / Python / ADF):
+├── sample_repo_sql/         # SQL repo
+│   ├── 01_staging_tables.sql       # Raw source tables (stg_*)
+│   ├── 02_intermediate_views.sql   # Business logic layer (int_*)
+│   ├── 03_reporting_tables.sql     # Reporting mart (rpt_*)
+│   └── 04_stored_procedures.sql    # Stored proc (LLM-only)
+├── sample_repo_python/      # Python repo
+│   └── transform_pipeline.py       # Pandas pipeline (reads int_* views, writes int_python_customer_scores)
+├── sample_repo_adf/         # Azure Data Factory repo
+│   ├── pipeline/                   # ADF pipeline definitions
+│   └── dataset/                    # ADF dataset definitions
 │
 ├── tests/                   # Automated test suite
 │   ├── test_diff.py         # Graph diff engine
@@ -155,7 +152,9 @@ data-lineage-poc/
 │   └── lineage-check.yml    # GitHub Action: auto PR lineage check
 │
 └── docs/
-    └── data-lineage.md      # Research paper
+    ├── current-data-lineage-paper.txt  # Research paper (final)
+    ├── validation.md                   # Quantitative validation report
+    └── data-model.md                   # Node/edge data model explained
 ```
 
 ---
@@ -196,7 +195,7 @@ All settings are loaded from environment variables or a `.env` file:
 |----------|---------|-------------|
 | `OPENAI_API_KEY` | *(empty)* | OpenAI API key for LLM fallback |
 | `OPENAI_MODEL` | `gpt-4.1-mini` | Model for code analysis |
-| `REPO_PATH` | `./sample_repo` | Directory to analyze |
+| `REPO_PATH` | `./sample_repo` | Single-repo fallback (legacy). By default the engine auto-detects the sibling repos `sample_repo_sql/`, `sample_repo_python/`, `sample_repo_adf/`. |
 | `HOST` | `0.0.0.0` | Server bind address |
 | `PORT` | `8000` | Server port |
 
@@ -213,6 +212,9 @@ To swap models, set `OPENAI_MODEL` in `.env` (any OpenAI-compatible model works)
 ---
 
 ## Graph Model
+
+> New to the model? See [docs/data-model.md](docs/data-model.md) for a plain-English
+> walkthrough of `LineageNode`, `LineageEdge`, `NodeType`, and `EdgeType` with examples.
 
 **Node Types:**
 | Type | Description | Example |

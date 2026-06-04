@@ -240,3 +240,44 @@ def test_analyze_unsupported_file_type_returns_empty(tmp_path):
     g = analyze_file(f)
     assert len(g.nodes) == 0
     assert len(g.edges) == 0
+
+
+# ── stable, repo-relative FILE ids ────────────────────────────────────
+
+def test_file_node_id_is_repo_relative(tmp_path):
+    """FILE-node IDs are relative to the repo root and prefixed with the source repo.
+
+    This is what makes the base/head graphs comparable in a PR check — an absolute
+    worktree path would make every file node differ between the two graphs.
+    """
+    sql = tmp_path / "models" / "a.sql"
+    sql.parent.mkdir()
+    sql.write_text("CREATE TABLE t (id INT);")
+    g = analyze_file(sql, source_repo="warehouse", repo_root=tmp_path)
+    file_nodes = [n for n in g.nodes if n.node_type == NodeType.FILE]
+    assert file_nodes and file_nodes[0].id == "warehouse/models/a.sql"
+    # The DEFINED_IN edge points at the same relative id, not an absolute path.
+    defined = [e for e in g.edges if e.edge_type == EdgeType.DEFINED_IN]
+    assert all(e.target_id == "warehouse/models/a.sql" for e in defined)
+
+
+# ── content-hash cache ────────────────────────────────────────────────
+
+def test_analyze_file_cache_reuses_and_isolates(tmp_path):
+    """A shared cache returns an equal-but-independent graph for identical content."""
+    sql = tmp_path / "a.sql"
+    sql.write_text("CREATE VIEW v AS SELECT id FROM t;")
+    cache: dict = {}
+
+    g1 = analyze_file(sql, source_repo="r", repo_root=tmp_path, cache=cache)
+    assert len(cache) == 1, "first analysis should populate the cache"
+
+    g2 = analyze_file(sql, source_repo="r", repo_root=tmp_path, cache=cache)
+    assert {n.id for n in g1.nodes} == {n.id for n in g2.nodes}
+    assert {(e.source_id, e.target_id, e.edge_type) for e in g1.edges} == \
+           {(e.source_id, e.target_id, e.edge_type) for e in g2.edges}
+
+    # Cache returns deep copies: mutating one result must not corrupt the other / the cache.
+    g2.nodes.clear()
+    g3 = analyze_file(sql, source_repo="r", repo_root=tmp_path, cache=cache)
+    assert len(g3.nodes) == len(g1.nodes) > 0

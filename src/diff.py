@@ -119,49 +119,97 @@ def compute_diff(before: LineageGraph, after: LineageGraph) -> LineageDiff:
     return diff
 
 
-def collect_impacted_nodes(diff: LineageDiff, full_graph: LineageGraph) -> list[str]:
+# Lineage edges whose *producer* endpoint is the target (consumer derives/reads
+# from producer). Downstream — the consumers of a node — is reached by walking
+# target → source. This mirrors the authoritative ``/impact`` traversal in api.py.
+_CONSUMER_FROM_TARGET = {EdgeType.DERIVES_FROM, EdgeType.READS_FROM}
+# Lineage edges whose *producer* endpoint is the source (producer writes/copies
+# to consumer). Downstream is reached by walking source → target.
+_CONSUMER_FROM_SOURCE = {EdgeType.WRITES_TO, EdgeType.COPIES_TO}
+# Structural edges (HAS_COLUMN: table→column, DEFINED_IN: table→file) are not data
+# flow — excluded so impact doesn't fan out across every column/file.
+
+
+def _downstream_adjacency(graph: LineageGraph) -> dict[str, set[str]]:
+    """Adjacency where ``adj[x]`` is the set of nodes *directly downstream* of ``x``."""
+    adj: dict[str, set[str]] = {}
+    for edge in graph.edges:
+        if edge.edge_type in _CONSUMER_FROM_TARGET:
+            adj.setdefault(edge.target_id, set()).add(edge.source_id)
+            # ADF dataset↔physical-table aliases are the same logical entity: bidirectional.
+            if edge.edge_type == EdgeType.READS_FROM and "ADF dataset" in (edge.transformation or ""):
+                adj.setdefault(edge.source_id, set()).add(edge.target_id)
+        elif edge.edge_type in _CONSUMER_FROM_SOURCE:
+            adj.setdefault(edge.source_id, set()).add(edge.target_id)
+    return adj
+
+
+def _changed_endpoint(edge: LineageEdge) -> str:
+    """The *consumer* endpoint of a lineage edge — the node whose computation changed.
+
+    For DERIVES_FROM/READS_FROM the consumer is the source; for WRITES_TO/COPIES_TO
+    it is the target. Walking downstream from this node yields the affected dependents.
     """
-    Given a diff and the full current lineage graph, return IDs of nodes that
-    are *downstream* of any changed node (i.e. potentially impacted).
+    if edge.edge_type in _CONSUMER_FROM_SOURCE:
+        return edge.target_id
+    return edge.source_id
 
-    Uses a BFS traversal over DERIVES_FROM, READS_FROM, WRITES_TO, HAS_COLUMN
-    edges in the downstream direction.
-    """
-    # Seed nodes: anything that was removed or part of a modified/removed edge
-    seed_ids: set[str] = set()
 
-    for change in diff.node_changes:
-        if change.change_type in (ChangeType.REMOVED, ChangeType.MODIFIED):
-            seed_ids.add(change.node.id)
-
-    for change in diff.edge_changes:
-        if change.change_type in (ChangeType.REMOVED, ChangeType.MODIFIED):
-            seed_ids.add(change.edge.source_id)
-        if change.change_type == ChangeType.ADDED:
-            seed_ids.add(change.edge.target_id)
-
-    if not seed_ids:
-        return []
-
-    # Build adjacency (source → targets that depend on source)
-    downstream_adj: dict[str, set[str]] = {}
-    _DOWNSTREAM_EDGE_TYPES = {EdgeType.DERIVES_FROM, EdgeType.READS_FROM, EdgeType.WRITES_TO, EdgeType.HAS_COLUMN}
-    for edge in full_graph.edges:
-        if edge.edge_type in _DOWNSTREAM_EDGE_TYPES:
-            downstream_adj.setdefault(edge.source_id, set()).add(edge.target_id)
-
-    # BFS
+def _bfs(seeds: set[str], adj: dict[str, set[str]]) -> set[str]:
     visited: set[str] = set()
-    queue = list(seed_ids)
+    queue = list(seeds)
     while queue:
         current = queue.pop(0)
         if current in visited:
             continue
         visited.add(current)
-        for neighbor in downstream_adj.get(current, []):
+        for neighbor in adj.get(current, ()):  # type: ignore[arg-type]
             if neighbor not in visited:
                 queue.append(neighbor)
+    return visited
 
-    # Exclude the seeds themselves — we want only *downstream* impact
-    impacted = visited - seed_ids
+
+def collect_impacted_nodes(
+    diff: LineageDiff, before_graph: LineageGraph, after_graph: LineageGraph
+) -> list[str]:
+    """Return IDs of nodes *downstream* of the change (i.e. potentially impacted).
+
+    Direction matters: a change to column X impacts the columns/tables that derive
+    **from** X, not the inputs X derives from. We seed from the consumer endpoint of
+    each change and walk the downstream adjacency.
+
+    Added/modified things are walked in the *after* graph (the new dependents); removed
+    things are walked in the *before* graph (what *used to* depend on the deleted node),
+    since they no longer exist in the after graph.
+    """
+    after_seeds: set[str] = set()
+    before_seeds: set[str] = set()
+
+    for change in diff.node_changes:
+        if change.change_type == ChangeType.REMOVED:
+            before_seeds.add(change.node.id)
+        else:  # ADDED or MODIFIED — present in the after graph
+            after_seeds.add(change.node.id)
+
+    for change in diff.edge_changes:
+        # Structural edges aren't data flow; their endpoints are covered by node changes.
+        if change.edge.edge_type in (EdgeType.HAS_COLUMN, EdgeType.DEFINED_IN):
+            continue
+        endpoint = _changed_endpoint(change.edge)
+        if change.change_type == ChangeType.REMOVED:
+            before_seeds.add(endpoint)
+        else:
+            after_seeds.add(endpoint)
+
+    if not after_seeds and not before_seeds:
+        return []
+
+    impacted: set[str] = set()
+    if after_seeds:
+        impacted |= _bfs(after_seeds, _downstream_adjacency(after_graph))
+    if before_seeds:
+        impacted |= _bfs(before_seeds, _downstream_adjacency(before_graph))
+
+    # Exclude the seeds themselves — we want only the *downstream* dependents.
+    impacted -= (after_seeds | before_seeds)
     return sorted(impacted)

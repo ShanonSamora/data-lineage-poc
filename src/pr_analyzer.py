@@ -61,12 +61,27 @@ def _get_changed_files(repo: git.Repo, base_ref: str, head_ref: str) -> list[str
     return sorted(paths)
 
 
-def _filter_relevant(paths: list[str]) -> list[str]:
-    """Keep only SQL, Python, and ADF JSON files."""
+def _filter_relevant(paths: list[str], repo_paths: list[str] | None = None) -> list[str]:
+    """Keep only SQL/Python/ADF-JSON files that live under an analysed source repo.
+
+    Scoping by ``repo_paths`` matters: a PR that only edits ``src/*.py`` (the analysis
+    code) shouldn't have those Python files reported as changed *data* files — they're
+    not part of any scanned data repo and contribute no lineage.
+    """
     from src.parser_adf import is_adf_file as _is_adf
+
+    roots = [str(rp).replace("\\", "/").strip("/") for rp in (repo_paths or [])]
+
+    def _under_repo(p: str) -> bool:
+        if not roots:
+            return True  # no scoping configured → keep all (legacy behaviour)
+        pp = p.replace("\\", "/")
+        return any(pp == r or pp.startswith(r + "/") for r in roots)
 
     result = []
     for p in paths:
+        if not _under_repo(p):
+            continue
         suffix = Path(p).suffix.lower()
         if suffix in SQL_EXTENSIONS | PYTHON_EXTENSIONS:
             result.append(p)
@@ -75,7 +90,9 @@ def _filter_relevant(paths: list[str]) -> list[str]:
     return result
 
 
-def _build_base_graph(repo_root: Path, repo_paths: list[str], base_ref: str) -> LineageGraph:
+def _build_base_graph(
+    repo_root: Path, repo_paths: list[str], base_ref: str, cache: dict | None = None
+) -> LineageGraph:
     """Materialize the base SHA in a temporary ``git worktree`` and run multi-repo analysis."""
     with tempfile.TemporaryDirectory() as tmp:
         worktree = Path(tmp) / "base"
@@ -100,7 +117,7 @@ def _build_base_graph(repo_root: Path, repo_paths: list[str], base_ref: str) -> 
             if not base_sources:
                 logger.warning("None of the configured repo paths exist in base worktree")
                 return LineageGraph()
-            return analyze_multiple_repos(base_sources)
+            return analyze_multiple_repos(base_sources, cache=cache)
         finally:
             subprocess.run(
                 ["git", "worktree", "remove", "--force", str(worktree)],
@@ -177,7 +194,7 @@ def analyze_pr(
 
     # 1. Changed files (for the report)
     changed = _get_changed_files(repo, base_ref, head_ref)
-    relevant = _filter_relevant(changed)
+    relevant = _filter_relevant(changed, rel_paths)
     logger.info(
         "PR %s..%s — %d changed files, %d relevant",
         base_ref, head_ref, len(changed), len(relevant),
@@ -199,20 +216,25 @@ def analyze_pr(
             base_ref=base_ref,
             head_ref=head_ref,
         )
+    # Shared cache: an unchanged file is analysed once and reused for both graphs.
+    # This makes unchanged files produce identical sub-graphs (no LLM paraphrase
+    # drift → no phantom diffs) and avoids re-running the LLM at base.
+    cache: dict = {}
+
     logger.info("Building HEAD graph from %d repos", len(head_sources))
-    after_graph = analyze_multiple_repos(head_sources)
+    after_graph = analyze_multiple_repos(head_sources, cache=cache)
 
     # 3. BASE graph from temporary worktree
     logger.info("Building BASE graph from git worktree at %s", base_ref)
-    before_graph = _build_base_graph(repo_root_path, rel_paths, base_ref)
+    before_graph = _build_base_graph(repo_root_path, rel_paths, base_ref, cache=cache)
 
     # 4. Diff
     diff = compute_diff(before_graph, after_graph)
 
-    # 5. Impact: BFS in the HEAD graph from each changed node
+    # 5. Impact: trace downstream consumers of each changed node/edge
     impacted: list[str] = []
     if diff.has_changes:
-        impacted = collect_impacted_nodes(diff, after_graph)
+        impacted = collect_impacted_nodes(diff, before_graph, after_graph)
 
     logger.info(
         "PR analysis complete: %d node changes, %d edge changes, %d downstream impacted",
@@ -243,7 +265,24 @@ _EDGE_LABEL = {
     EdgeType.READS_FROM: "reads from",
     EdgeType.WRITES_TO: "writes to",
     EdgeType.DEFINED_IN: "defined in",
+    EdgeType.COPIES_TO: "copies to",
+    EdgeType.TRIGGERS: "triggers",
 }
+
+# Caps to keep the PR comment well under GitHub's 65 536-char limit on big diffs.
+_MAX_NODE_ROWS = 40
+_MAX_EDGE_ROWS = 50
+_MAX_IMPACT_ROWS = 30
+
+
+def _joined(lines: list[str]) -> str:
+    """Join report lines with a guaranteed trailing newline.
+
+    The trailing newline matters: the GitHub Actions step appends the report to
+    ``$GITHUB_OUTPUT`` inside a heredoc, and a report without a final newline would
+    merge into the closing delimiter line ("Matching delimiter not found" failure).
+    """
+    return "\n".join(lines) + "\n"
 
 
 def render_markdown(result: PRAnalysisResult) -> str:
@@ -255,7 +294,7 @@ def render_markdown(result: PRAnalysisResult) -> str:
     if not result.relevant_files:
         lines.append("> **No SQL or Python files were changed in this PR.**")
         lines.append("> Data lineage is **not affected**.")
-        return "\n".join(lines)
+        return _joined(lines)
 
     if not result.has_lineage_impact:
         lines.append("> Changes were found in data files, but **no lineage impact** was detected.")
@@ -263,7 +302,22 @@ def render_markdown(result: PRAnalysisResult) -> str:
         lines.append("**Scanned files:**")
         for f in result.relevant_files:
             lines.append(f"- `{f}`")
-        return "\n".join(lines)
+        return _joined(lines)
+
+    # Headline — the one-sentence takeaway a reviewer reads first.
+    n_impact = len(result.impacted_nodes)
+    n_files = len(result.relevant_files)
+    if n_impact:
+        lines.append(
+            f"🔎 **{n_impact} downstream node{'s' if n_impact != 1 else ''}** may be affected "
+            f"by changes to **{n_files} file{'s' if n_files != 1 else ''}**."
+        )
+    else:
+        lines.append(
+            f"The lineage graph changed for **{n_files} file{'s' if n_files != 1 else ''}**, "
+            "but no existing downstream nodes are affected."
+        )
+    lines.append("")
 
     # Summary
     counts = result.diff.summary_counts()
@@ -274,7 +328,7 @@ def render_markdown(result: PRAnalysisResult) -> str:
     lines.append(f"| Edges added | {counts['edges_added']} |")
     lines.append(f"| Edges removed | {counts['edges_removed']} |")
     lines.append(f"| Edges modified | {counts['edges_modified']} |")
-    lines.append(f"| Downstream nodes impacted | {len(result.impacted_nodes)} |")
+    lines.append(f"| Downstream nodes impacted | {n_impact} |")
     lines.append("")
 
     # Files scanned
@@ -292,9 +346,11 @@ def render_markdown(result: PRAnalysisResult) -> str:
         lines.append("")
         lines.append("| Status | Node | Type |")
         lines.append("|--------|------|------|")
-        for c in result.diff.node_changes:
+        for c in result.diff.node_changes[:_MAX_NODE_ROWS]:
             icon = _ICON[c.change_type]
             lines.append(f"| {icon} {c.change_type.value} | `{c.node.id}` | {c.node.node_type.value} |")
+        if len(result.diff.node_changes) > _MAX_NODE_ROWS:
+            lines.append(f"| | … and {len(result.diff.node_changes) - _MAX_NODE_ROWS} more | |")
         lines.append("")
 
     # Edge changes
@@ -303,7 +359,7 @@ def render_markdown(result: PRAnalysisResult) -> str:
         lines.append("")
         lines.append("| Status | Source | → | Target | Relationship | Transformation |")
         lines.append("|--------|--------|---|--------|-------------|----------------|")
-        for c in result.diff.edge_changes:
+        for c in result.diff.edge_changes[:_MAX_EDGE_ROWS]:
             icon = _ICON[c.change_type]
             label = _EDGE_LABEL.get(c.edge.edge_type, c.edge.edge_type.value)
             xform = f"`{c.edge.transformation}`" if c.edge.transformation else "—"
@@ -315,6 +371,8 @@ def render_markdown(result: PRAnalysisResult) -> str:
                 lines.append(
                     f"| | ↳ *was* | | | | {old_xform} |"
                 )
+        if len(result.diff.edge_changes) > _MAX_EDGE_ROWS:
+            lines.append(f"| | … and {len(result.diff.edge_changes) - _MAX_EDGE_ROWS} more | | | | |")
         lines.append("")
 
     # Downstream impact
@@ -325,10 +383,10 @@ def render_markdown(result: PRAnalysisResult) -> str:
             "The following nodes are downstream of the changes and may be affected:"
         )
         lines.append("")
-        for nid in result.impacted_nodes[:30]:  # cap at 30 to avoid huge comments
+        for nid in result.impacted_nodes[:_MAX_IMPACT_ROWS]:
             lines.append(f"- `{nid}`")
-        if len(result.impacted_nodes) > 30:
-            lines.append(f"- ... and {len(result.impacted_nodes) - 30} more")
+        if n_impact > _MAX_IMPACT_ROWS:
+            lines.append(f"- … and {n_impact - _MAX_IMPACT_ROWS} more")
         lines.append("")
 
     # Confidence note
@@ -338,4 +396,4 @@ def render_markdown(result: PRAnalysisResult) -> str:
         "hybrid static analysis (deterministic SQL parser + LLM fallback).*"
     )
 
-    return "\n".join(lines)
+    return _joined(lines)

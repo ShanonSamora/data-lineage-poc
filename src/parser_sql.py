@@ -25,6 +25,7 @@ from src.models import (
     LineageNode,
     NodeType,
 )
+from src.paths import file_node_id, repo_relative_path
 
 logger = logging.getLogger(__name__)
 
@@ -70,13 +71,20 @@ def _extract_source_columns(select_expr: exp.Select) -> list[tuple[str, str, str
     return results
 
 
-def parse_sql_file(file_path: str | Path, sql_text: str | None = None) -> LineageGraph:
+def parse_sql_file(
+    file_path: str | Path,
+    sql_text: str | None = None,
+    source_repo: str = "",
+    repo_root: str | Path | None = None,
+) -> LineageGraph:
     """
     Parse a SQL file and extract column-level lineage.
 
     Args:
         file_path: Path to the SQL file (used for metadata).
         sql_text: Raw SQL content. If None, reads from file_path.
+        source_repo: Repo name used to build a stable, relative FILE-node ID.
+        repo_root: Root the FILE-node ID is made relative to (see ``src.paths``).
 
     Returns:
         LineageGraph with extracted nodes and edges.
@@ -85,12 +93,13 @@ def parse_sql_file(file_path: str | Path, sql_text: str | None = None) -> Lineag
     if sql_text is None:
         sql_text = file_path.read_text(encoding="utf-8")
 
+    file_id = file_node_id(file_path, repo_root, source_repo)
     graph = LineageGraph()
     file_node = LineageNode(
-        id=str(file_path),
+        id=file_id,
         name=file_path.name,
         node_type=NodeType.FILE,
-        metadata={"path": str(file_path)},
+        metadata={"path": repo_relative_path(file_path, repo_root)},
     )
     graph.nodes.append(file_node)
 
@@ -104,46 +113,46 @@ def parse_sql_file(file_path: str | Path, sql_text: str | None = None) -> Lineag
         if statement is None:
             continue
         try:
-            _process_statement(statement, graph, file_path)
+            _process_statement(statement, graph, file_id)
         except Exception as e:
             logger.debug("Could not fully process statement in %s: %s", file_path, e)
 
     return graph
 
 
-def _process_statement(stmt: exp.Expression, graph: LineageGraph, file_path: Path) -> None:
+def _process_statement(stmt: exp.Expression, graph: LineageGraph, file_id: str) -> None:
     """Route a top-level statement to the appropriate handler."""
 
     # CREATE TABLE ... AS SELECT / CREATE VIEW ... AS SELECT
     if isinstance(stmt, exp.Create):
-        _handle_create(stmt, graph, file_path)
+        _handle_create(stmt, graph, file_id)
         return
 
     # INSERT INTO ... SELECT
     if isinstance(stmt, exp.Insert):
-        _handle_insert(stmt, graph, file_path)
+        _handle_insert(stmt, graph)
         return
 
     # Standalone SELECT (e.g. inside procedures we may extract)
     if isinstance(stmt, exp.Select):
-        _handle_select(stmt, graph, file_path, target_table=None)
+        _handle_select(stmt, graph, target_table=None)
         return
 
     # CREATE PROCEDURE / FUNCTION — extract inner SQL
     if isinstance(stmt, (exp.Command,)):
         # sqlglot may parse PL/pgSQL blocks as Command; skip gracefully
-        logger.debug("Skipping command-type node in %s", file_path)
+        logger.debug("Skipping command-type node")
         return
 
     # Walk children looking for CREATE/SELECT inside complex blocks
     for child in stmt.walk():
         if isinstance(child, exp.Create):
-            _handle_create(child, graph, file_path)
+            _handle_create(child, graph, file_id)
         elif isinstance(child, exp.Insert):
-            _handle_insert(child, graph, file_path)
+            _handle_insert(child, graph)
 
 
-def _handle_create(stmt: exp.Create, graph: LineageGraph, file_path: Path) -> None:
+def _handle_create(stmt: exp.Create, graph: LineageGraph, file_id: str) -> None:
     """Handle CREATE TABLE / CREATE VIEW statements."""
     table_expr = stmt.this
     if not isinstance(table_expr, (exp.Table, exp.Schema)):
@@ -163,25 +172,25 @@ def _handle_create(stmt: exp.Create, graph: LineageGraph, file_path: Path) -> No
         id=table_name,
         name=table_name,
         node_type=node_type,
-        metadata={"file": str(file_path)},
+        metadata={"file": file_id},
     )
     graph.nodes.append(table_node)
     graph.edges.append(LineageEdge(
         source_id=table_name,
-        target_id=str(file_path),
+        target_id=file_id,
         edge_type=EdgeType.DEFINED_IN,
     ))
 
     # If it's CREATE ... AS SELECT, extract lineage from the SELECT
     select = stmt.find(exp.Select)
     if select:
-        _handle_select(select, graph, file_path, target_table=table_name)
+        _handle_select(select, graph, target_table=table_name)
     else:
         # Plain CREATE TABLE with column definitions
         _extract_column_defs(stmt, table_name, graph)
 
 
-def _handle_insert(stmt: exp.Insert, graph: LineageGraph, file_path: Path) -> None:
+def _handle_insert(stmt: exp.Insert, graph: LineageGraph) -> None:
     """Handle INSERT INTO ... SELECT statements.
 
     The target can be either:
@@ -202,13 +211,12 @@ def _handle_insert(stmt: exp.Insert, graph: LineageGraph, file_path: Path) -> No
 
     select = stmt.find(exp.Select)
     if select:
-        _handle_select(select, graph, file_path, target_table=target)
+        _handle_select(select, graph, target_table=target)
 
 
 def _handle_select(
     select: exp.Select,
     graph: LineageGraph,
-    file_path: Path,
     target_table: str | None,
 ) -> None:
     """Extract column-level lineage from a SELECT statement."""

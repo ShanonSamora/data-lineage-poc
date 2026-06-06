@@ -286,6 +286,19 @@ def _parse_notebook_activity(activity: dict, pipeline_name: str, graph: LineageG
         transformation=f"Notebook({activity.get('name', '')})",
     ))
 
+    # If the activity declares its output table (baseParameters.target_table), connect the
+    # notebook to it so the Python step isn't a dead-end. The table is produced by the
+    # Python parser too; this WRITES_TO edge links the orchestration node to that lineage.
+    base_params = type_props.get("baseParameters", {})
+    target_table = base_params.get("target_table") if isinstance(base_params, dict) else None
+    if target_table:
+        graph.edges.append(LineageEdge(
+            source_id=normalized,
+            target_id=str(target_table).split(".")[-1].lower(),
+            edge_type=EdgeType.WRITES_TO,
+            transformation=f"Notebook({activity.get('name', '')}) → {target_table}",
+        ))
+
 
 def _parse_stored_proc_activity(activity: dict, pipeline_name: str, graph: LineageGraph, source_repo: str) -> None:
     """Extract stored procedure reference from a SqlServerStoredProcedure activity.
@@ -339,13 +352,20 @@ def _parse_dataset(doc: dict, file_path: Path, source_repo: str, repo_root: str 
     schema_name = type_props.get("schema", "")
 
     if table_name:
-        fq_name = f"{schema_name}.{table_name}" if schema_name else table_name
+        # Use the bare table name as the id (matching the SQL parser, which never
+        # schema-qualifies). A schema-prefixed id like "bi.customer_exposure_snapshot"
+        # contains a dot, which the column-id scheme ("table.column") would mis-split.
+        # Keep the schema in metadata for display instead.
+        table_id = table_name.lower()
+        meta = {"resolved_from": f"adf.dataset.{ds_name}"}
+        if schema_name:
+            meta["schema"] = schema_name
         table_node = LineageNode(
-            id=fq_name,
+            id=table_id,
             name=table_name,
             node_type=NodeType.TABLE,
             source_repo=source_repo,
-            metadata={"resolved_from": f"adf.dataset.{ds_name}"},
+            metadata=meta,
         )
         graph.nodes.append(table_node)
         # Dataset maps to a physical table

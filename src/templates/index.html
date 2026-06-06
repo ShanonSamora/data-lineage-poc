@@ -222,6 +222,7 @@
         .type-procedure { background: #3a1f06; color: #fb923c; }
         .type-python_function { background: #1f1a08; color: #fbbf24; }
         .type-adf_pipeline, .type-adf_dataset, .type-adf_dataflow { background: #1e1b4b; color: #a5b4fc; }
+        .type-file     { background: #1f2937; color: #94a3b8; }
         .flow-card-columns { padding: 5px 0 4px; }
         .flow-col-item {
             padding: 5px 14px; display: flex; align-items: center; gap: 8px;
@@ -837,7 +838,10 @@
 
     // ── Flow View ──────────────────────────────────────────────────────
     function initFlowTableEntry(map, tableId, data) {
-        const tableNode = data.nodes.find(n => n.id === tableId && isTableLike(n))
+        // Accept FILE nodes (e.g. a notebook a pipeline triggers) so they render as
+        // themselves with their basename, not as a synthetic empty TABLE titled with the
+        // full path.
+        const tableNode = data.nodes.find(n => n.id === tableId && (isTableLike(n) || n.node_type === 'FILE'))
             || { id: tableId, name: tableId, node_type: 'TABLE' };
         const columns = columnsForOwner(tableId, data)
             .sort((a, b) => (a.name || a.id).localeCompare(b.name || b.id));
@@ -848,15 +852,9 @@
         const centerNode = data.nodes.find(n => n.id === centerId);
         if (!centerNode) return null;
 
-        const centerTableId = (centerNode.node_type === 'COLUMN')
+        let centerTableId = (centerNode.node_type === 'COLUMN')
             ? getColumnTableName(centerNode)
             : centerId;
-
-        const centerTableNode = data.nodes.find(n => n.id === centerTableId && isTableLike(n))
-            || { id: centerTableId, name: centerTableId, node_type: 'TABLE' };
-
-        const centerCols = columnsForOwner(centerTableId, data)
-            .sort((a, b) => (a.name || a.id).localeCompare(b.name || b.id));
 
         // Build the ADF dataset ↔ physical table alias map. Both ends point at each other,
         // so edges anchored at either side count as anchored at the same logical entity.
@@ -869,8 +867,53 @@
                 aliasOf.set(t, s);
             }
         }
+
+        // A SQL-backed ADF dataset (e.g. SqlRptCustomerExposure) is just a wrapper over its
+        // physical table. Re-center on that table so its columns and lineage read as the
+        // table's own work instead of rendering SQL column lineage under an "ADF DATASET"
+        // badge. Raw blob datasets have no table alias and stay centred on themselves.
+        const startNode = data.nodes.find(n => n.id === centerTableId);
+        if (startNode && startNode.node_type === 'ADF_DATASET') {
+            const tbl = aliasOf.get(centerTableId);
+            const tblNode = tbl && data.nodes.find(n => n.id === tbl && isTableNode(n));
+            if (tblNode && columnsForOwner(tbl, data).length) {
+                centerTableId = tbl;
+            }
+        }
+
+        const centerTableNode = data.nodes.find(n => n.id === centerTableId && (isTableLike(n) || n.node_type === 'FILE'))
+            || { id: centerTableId, name: centerTableId, node_type: 'TABLE' };
+
         const centerAlias = aliasOf.get(centerTableId);
         const isCenterAnchor = (id) => id === centerTableId || (centerAlias && id === centerAlias);
+
+        // If the center table is wrapped by an ADF dataset, surface that as a "via ADF" tag
+        // plus a role: ADF either writes into it (a COPIES_TO sink → "landing") or reads out
+        // of it (a COPIES_TO source → "export"). Shows the in/out boundary explicitly, whether
+        // the user clicked the dataset or the table.
+        let datasetAliasLabel = '';
+        let datasetRole = '';
+        const aliasDsNode = centerAlias && data.nodes.find(n => n.id === centerAlias && n.node_type === 'ADF_DATASET');
+        if (aliasDsNode) {
+            datasetAliasLabel = aliasDsNode.name || centerAlias;
+            for (const e of data.edges) {
+                if ((e.edge_type || e.type) !== 'COPIES_TO') continue;
+                if (edgeTarget(e) === centerAlias) datasetRole = 'landing';
+                else if (edgeSource(e) === centerAlias) datasetRole = 'export';
+            }
+        }
+
+        // Columns and column-level (DERIVES_FROM) edges live on the physical table, not on
+        // the ADF dataset wrapper. When the clicked node owns no columns itself but is aliased
+        // to a table that does (an ADF SQL dataset → e.g. stg_transactions), anchor the center
+        // card's columns and column arrows on that backing table so they surface too.
+        let centerColTableId = centerTableId;
+        if (!columnsForOwner(centerTableId, data).length
+            && centerAlias && columnsForOwner(centerAlias, data).length) {
+            centerColTableId = centerAlias;
+        }
+        const centerCols = columnsForOwner(centerColTableId, data)
+            .sort((a, b) => (a.name || a.id).localeCompare(b.name || b.id));
 
         const upMap = new Map();
         const downMap = new Map();
@@ -881,20 +924,20 @@
             const tgt = edgeTarget(e);
             const conf = edgeConfidence(e);
             const llm = isLlmEdge(e);
-            const prefix = centerTableId + '.';
+            const prefix = centerColTableId + '.';
 
             if (et === 'DERIVES_FROM') {
                 if (src.startsWith(prefix)) {
                     // center.col derives from upstream.col
                     const upId = tableFromColumnId(tgt);
-                    if (upId && upId !== centerTableId) {
+                    if (upId && upId !== centerTableId && upId !== centerColTableId) {
                         if (!upMap.has(upId)) initFlowTableEntry(upMap, upId, data);
                         upMap.get(upId).connections.push({ centerColId: src, upstreamColId: tgt, confidence: conf, isLlm: llm });
                     }
                 } else if (tgt.startsWith(prefix)) {
                     // downstream.col derives from center.col
                     const downId = tableFromColumnId(src);
-                    if (downId && downId !== centerTableId) {
+                    if (downId && downId !== centerTableId && downId !== centerColTableId) {
                         if (!downMap.has(downId)) initFlowTableEntry(downMap, downId, data);
                         downMap.get(downId).connections.push({ centerColId: tgt, downstreamColId: src, confidence: conf, isLlm: llm });
                     }
@@ -946,7 +989,37 @@
             for (const id of toRemove) map.delete(id);
         }
 
+        // Collapse SQL-backed ADF dataset cards in the up/down columns to their physical
+        // table (the same way the center does), so they show the table's schema with a
+        // "via ADF" tag instead of an empty dataset card. Raw blob datasets (no SQL table
+        // alias) stay as-is. Runs before collapseAliasedDatasets, which then only needs to
+        // handle the rare case where a dataset and its table both surface separately.
+        function resolveDatasetEntriesToTables(map) {
+            for (const [id, entry] of [...map.entries()]) {
+                if (entry.tableNode.node_type !== 'ADF_DATASET') continue;
+                const tbl = aliasOf.get(id);
+                const tblNode = tbl && data.nodes.find(n => n.id === tbl && isTableNode(n));
+                if (!tblNode || !columnsForOwner(tbl, data).length) continue;
+                map.delete(id);
+                let target = map.get(tbl);
+                if (!target) {
+                    target = {
+                        tableNode: tblNode,
+                        columns: columnsForOwner(tbl, data).sort((a, b) => (a.name || a.id).localeCompare(b.name || b.id)),
+                        connections: [],
+                    };
+                    map.set(tbl, target);
+                }
+                for (const c of entry.connections) target.connections.push(c);
+                target.aliasLabels = target.aliasLabels || new Set();
+                target.aliasLabels.add(entry.tableNode.name || id);
+            }
+        }
+        resolveDatasetEntriesToTables(upMap);
+        resolveDatasetEntriesToTables(downMap);
+
         const centerAliasLabel = new Set();
+        if (datasetAliasLabel) centerAliasLabel.add(datasetAliasLabel);
         collapseAliasedDatasets(upMap, downMap);
         collapseAliasedDatasets(downMap, upMap);
 
@@ -955,12 +1028,13 @@
             centerTableNode,
             centerCols,
             centerAliasLabel: centerAliasLabel.size ? Array.from(centerAliasLabel).join(', ') : '',
+            centerRole: datasetRole,
             upstream: Array.from(upMap.values()),
             downstream: Array.from(downMap.values()),
         };
     }
 
-    function renderFlowCard(tableNode, columns, connections, role, aliasLabel) {
+    function renderFlowCard(tableNode, columns, connections, role, aliasLabel, roleLabel) {
         const nt = (tableNode.node_type || 'TABLE').toLowerCase();
         const isCenter = role === 'center';
         const connectedColIds = new Set(connections.map(c =>
@@ -974,8 +1048,8 @@
         const colsHtml = columns.slice(0, maxCols).map(col => {
             const isConn = connectedColIds.has(col.id);
             const connClass = isConn ? 'fc-connected' : '';
-            return `<div class="flow-col-item ${connClass}" id="${safeFlowId(col.id)}" data-col="${escAttr(col.id)}"
-                         onmouseenter="highlightFlowCol('${escAttr(col.id)}')"
+            return `<div class="flow-col-item ${connClass}" id="${safeFlowId(tableNode.id + '::' + col.id)}" data-col="${escAttr(col.id)}"
+                         onmouseenter="highlightFlowCol('${escAttr(tableNode.id)}','${escAttr(col.id)}')"
                          onmouseleave="unhighlightFlowCol()"
                          onclick="showNodeDetail('${escAttr(col.id)}')">
                 <span class="flow-col-dot"></span>
@@ -986,8 +1060,11 @@
             ? `<div class="flow-col-more">+${columns.length - maxCols} more columns</div>`
             : '';
 
-        const aliasHtml = aliasLabel
-            ? `<div class="flow-card-alias" title="ADF dataset alias">via ADF: ${escHtml(aliasLabel)}</div>`
+        const roleText = roleLabel === 'landing' ? '↓ Landing'
+                       : roleLabel === 'export'  ? '↑ Export'
+                       : '';
+        const aliasHtml = (roleText || aliasLabel)
+            ? `<div class="flow-card-alias" title="ADF dataset boundary">${roleText ? `<strong>${roleText}</strong>${aliasLabel ? ' · ' : ''}` : ''}${aliasLabel ? `via ADF: ${escHtml(aliasLabel)}` : ''}</div>`
             : '';
 
         const cardClass = isCenter ? 'flow-card flow-card-center' : 'flow-card';
@@ -1064,7 +1141,7 @@
                 ...fd.downstream.flatMap(e => e.connections.map(c => c.centerColId)),
             ]);
             const div = document.createElement('div');
-            div.innerHTML = renderFlowCard(fd.centerTableNode, fd.centerCols, Array.from(allConnectedCols), 'center', fd.centerAliasLabel);
+            div.innerHTML = renderFlowCard(fd.centerTableNode, fd.centerCols, Array.from(allConnectedCols), 'center', fd.centerAliasLabel, fd.centerRole);
             centerEl.appendChild(div.firstElementChild);
         }
 
@@ -1093,8 +1170,8 @@
         requestAnimationFrame(() => drawFlowConnections(fd));
     }
 
-    function getFlowRect(colId) {
-        const el = document.getElementById(safeFlowId(colId));
+    function getFlowRect(ownerId, colId) {
+        const el = document.getElementById(safeFlowId(ownerId + '::' + colId));
         const content = document.getElementById('flow-content');
         const panel = document.getElementById('flow-panel');
         if (!el || !content || !panel) return null;
@@ -1139,15 +1216,15 @@
 
         for (const entry of fd.upstream) {
             for (const conn of entry.connections) {
-                const upR = getFlowRect(conn.upstreamColId);
-                const cenR = getFlowRect(conn.centerColId);
+                const upR = getFlowRect(entry.tableNode.id, conn.upstreamColId);
+                const cenR = getFlowRect(fd.centerTableNode.id, conn.centerColId);
                 if (upR && cenR) drawCurve(upR.right, upR.midY, cenR.left, cenR.midY, conn.isLlm);
             }
         }
         for (const entry of fd.downstream) {
             for (const conn of entry.connections) {
-                const cenR = getFlowRect(conn.centerColId);
-                const downR = getFlowRect(conn.downstreamColId);
+                const cenR = getFlowRect(fd.centerTableNode.id, conn.centerColId);
+                const downR = getFlowRect(entry.tableNode.id, conn.downstreamColId);
                 if (cenR && downR) drawCurve(cenR.right, cenR.midY, downR.left, downR.midY, conn.isLlm);
             }
         }
@@ -1159,38 +1236,42 @@
         renderFlowView(tableId);
     }
 
-    function highlightFlowCol(colId) {
+    function highlightFlowCol(ownerId, colId) {
         const fd = window._currentFlowData;
         if (!fd) return;
+        const centerOwner = fd.centerTableNode.id;
 
-        const relatedCols = new Set([colId]);
+        // Track related columns as scoped owner::col keys, so a column shared across
+        // cards (e.g. propagated staging columns on a raw-source ADF dataset) only
+        // highlights within the card actually hovered.
+        const related = new Set([ownerId + '::' + colId]);
 
         for (const entry of fd.upstream) {
             for (const c of entry.connections) {
-                if (c.upstreamColId === colId) relatedCols.add(c.centerColId);
-                if (c.centerColId === colId) relatedCols.add(c.upstreamColId);
+                if (ownerId === entry.tableNode.id && c.upstreamColId === colId)
+                    related.add(centerOwner + '::' + c.centerColId);
+                if (ownerId === centerOwner && c.centerColId === colId)
+                    related.add(entry.tableNode.id + '::' + c.upstreamColId);
             }
         }
         for (const entry of fd.downstream) {
             for (const c of entry.connections) {
-                if (c.downstreamColId === colId) relatedCols.add(c.centerColId);
-                if (c.centerColId === colId) relatedCols.add(c.downstreamColId);
+                if (ownerId === entry.tableNode.id && c.downstreamColId === colId)
+                    related.add(centerOwner + '::' + c.centerColId);
+                if (ownerId === centerOwner && c.centerColId === colId)
+                    related.add(entry.tableNode.id + '::' + c.downstreamColId);
             }
         }
 
-        for (const id of relatedCols) {
-            const el = document.getElementById(safeFlowId(id));
+        for (const key of related) {
+            const el = document.getElementById(safeFlowId(key));
             if (el) el.classList.add('fc-highlighted');
         }
 
-        // Highlight SVG paths
+        // Dim SVG paths to spotlight the hovered column's connections.
         const svg = document.getElementById('flow-svg');
         if (!svg) return;
-        const paths = svg.querySelectorAll('path[d]');
-        paths.forEach(p => {
-            const opacity = p.getAttribute('stroke').includes('arr') ? '1' : undefined;
-            p.setAttribute('opacity', '0.2');
-        });
+        svg.querySelectorAll('path[d]').forEach(p => p.setAttribute('opacity', '0.2'));
     }
 
     function unhighlightFlowCol() {

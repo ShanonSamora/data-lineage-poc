@@ -147,7 +147,128 @@ def _analyze_sql(
             len(det_graph.nodes), len(det_graph.edges),
         )
 
+    # Step 3: wire stored-procedure nodes to the tables they build.
+    _link_procedures_to_outputs(content, det_graph)
+
     return det_graph
+
+
+_PROC_DEF_RE = re.compile(
+    r"\bCREATE\s+(?:OR\s+REPLACE\s+)?(?:PROCEDURE|FUNCTION)\s+([A-Za-z0-9_.\"]+)",
+    re.IGNORECASE,
+)
+
+
+def _link_procedures_to_outputs(content: str, graph: LineageGraph) -> None:
+    """Connect a stored-procedure node to the tables it builds.
+
+    The LLM extracts a procedure's column lineage but attributes the WRITES_TO /
+    DERIVES_FROM edges to the *source* tables, leaving the PROCEDURE node (created by the
+    ADF parser from a pipeline's stored-procedure activity) with no link to the table it
+    actually populates. We find each CREATE PROCEDURE/FUNCTION in the file and add a
+    WRITES_TO edge from it to every table DEFINED_IN the same file, so the orchestration
+    chain (pipeline → procedure → table) connects instead of dead-ending. The procedure id
+    matches the ADF parser's convention (schema dropped, lowercased) so the nodes merge.
+    """
+    from src.models import EdgeType, LineageEdge, LineageNode, NodeType
+
+    proc_ids = [
+        m.group(1).replace('"', "").split(".")[-1].lower()
+        for m in _PROC_DEF_RE.finditer(content)
+    ]
+    proc_ids = [p for p in proc_ids if p]
+    if not proc_ids:
+        return
+
+    node_type = {n.id: n.node_type for n in graph.nodes}
+    # Tables the procedure *writes* are the targets of the WRITES_TO edges the LLM produced
+    # for its INSERT/UPDATE statements (e.g. "<source> WRITES_TO rpt_monthly_summary").
+    # Using WRITES_TO targets — not every table DEFINED_IN the file — avoids wrongly linking
+    # the procedure to the source tables it only reads.
+    output_tables = {
+        e.target_id for e in graph.edges
+        if e.edge_type == EdgeType.WRITES_TO
+        and node_type.get(e.target_id) in (NodeType.TABLE, NodeType.VIEW)
+    }
+    if not output_tables:
+        return
+
+    existing = {(e.source_id, e.target_id, e.edge_type) for e in graph.edges}
+    have_node = {n.id for n in graph.nodes}
+    for proc_id in proc_ids:
+        if proc_id not in have_node:
+            graph.nodes.append(LineageNode(
+                id=proc_id, name=proc_id, node_type=NodeType.PROCEDURE,
+                metadata={"source": "sql-procedure"},
+            ))
+            have_node.add(proc_id)
+        for tbl in output_tables:
+            key = (proc_id, tbl, EdgeType.WRITES_TO)
+            if key not in existing:
+                graph.edges.append(LineageEdge(
+                    source_id=proc_id, target_id=tbl, edge_type=EdgeType.WRITES_TO,
+                    transformation="stored procedure output",
+                ))
+                existing.add(key)
+
+
+_PROC_DEF_RE = re.compile(
+    r"\bCREATE\s+(?:OR\s+REPLACE\s+)?(?:PROCEDURE|FUNCTION)\s+([A-Za-z0-9_.\"]+)",
+    re.IGNORECASE,
+)
+
+
+def _link_procedures_to_outputs(content: str, graph: LineageGraph) -> None:
+    """Connect a stored-procedure node to the tables it builds.
+
+    The LLM extracts a procedure's column lineage but attributes the WRITES_TO /
+    DERIVES_FROM edges to the *source* tables, leaving the PROCEDURE node (created by the
+    ADF parser from a pipeline's stored-procedure activity) with no link to the table it
+    actually populates. We find each CREATE PROCEDURE/FUNCTION in the file and add a
+    WRITES_TO edge from it to every table DEFINED_IN the same file, so the orchestration
+    chain (pipeline → procedure → table) connects instead of dead-ending. The procedure id
+    matches the ADF parser's convention (schema dropped, lowercased) so the nodes merge.
+    """
+    from src.models import EdgeType, LineageEdge, LineageNode, NodeType
+
+    proc_ids = [
+        m.group(1).replace('"', "").split(".")[-1].lower()
+        for m in _PROC_DEF_RE.finditer(content)
+    ]
+    proc_ids = [p for p in proc_ids if p]
+    if not proc_ids:
+        return
+
+    node_type = {n.id: n.node_type for n in graph.nodes}
+    # Tables the procedure *writes* are the targets of the WRITES_TO edges the LLM produced
+    # for its INSERT/UPDATE statements (e.g. "<source> WRITES_TO rpt_monthly_summary").
+    # Using WRITES_TO targets — not every table DEFINED_IN the file — avoids wrongly linking
+    # the procedure to the source tables it only reads.
+    output_tables = {
+        e.target_id for e in graph.edges
+        if e.edge_type == EdgeType.WRITES_TO
+        and node_type.get(e.target_id) in (NodeType.TABLE, NodeType.VIEW)
+    }
+    if not output_tables:
+        return
+
+    existing = {(e.source_id, e.target_id, e.edge_type) for e in graph.edges}
+    have_node = {n.id for n in graph.nodes}
+    for proc_id in proc_ids:
+        if proc_id not in have_node:
+            graph.nodes.append(LineageNode(
+                id=proc_id, name=proc_id, node_type=NodeType.PROCEDURE,
+                metadata={"source": "sql-procedure"},
+            ))
+            have_node.add(proc_id)
+        for tbl in output_tables:
+            key = (proc_id, tbl, EdgeType.WRITES_TO)
+            if key not in existing:
+                graph.edges.append(LineageEdge(
+                    source_id=proc_id, target_id=tbl, edge_type=EdgeType.WRITES_TO,
+                    transformation="stored procedure output",
+                ))
+                existing.add(key)
 
 
 def _analyze_python(
@@ -324,11 +445,75 @@ def analyze_multiple_repos(
     # in practice they carry the same schema as the sink they land in.
     _propagate_copy_source_columns(graph)
 
+    # Infer export-sink schemas: an external Copy target (e.g. the BI mart) has no DDL,
+    # but a no-mapping Copy moves columns 1:1 from the SQL source it reads.
+    _propagate_copy_sink_columns(graph)
+
     logger.info(
         "Multi-repo scan complete: %d repos → %d nodes, %d edges",
         len(repo_sources), len(graph.nodes), len(graph.edges),
     )
     return graph
+
+
+def _propagate_copy_sink_columns(graph: LineageGraph) -> None:
+    """Infer an export sink's schema from the SQL source it is copied from.
+
+    An ADF Copy to an external system (e.g. SqlRptCustomerExposure → ExternalReportingMart,
+    landing in customer_exposure_snapshot) leaves the sink schemaless — that table lives in
+    another system with no DDL in the repo. A Copy with no explicit column mapping moves
+    columns 1:1, so we give the sink table the source table's columns and add inferred
+    DERIVES_FROM edges (confidence 0.9, ``metadata.source = "inferred-copy"``) so the export
+    surfaces as column-level lineage instead of a dead, schemaless node.
+    """
+    from src.models import EdgeType, LineageEdge, LineageNode, NodeType
+
+    # ADF dataset → physical table aliases, and HAS_COLUMN ownership.
+    alias_for: dict[str, str] = {}
+    for e in graph.edges:
+        if e.edge_type == EdgeType.READS_FROM and "ADF dataset" in (e.transformation or ""):
+            alias_for[e.source_id] = e.target_id
+
+    has_col_by_owner: dict[str, list[str]] = {}
+    for e in graph.edges:
+        if e.edge_type == EdgeType.HAS_COLUMN:
+            has_col_by_owner.setdefault(e.source_id, []).append(e.target_id)
+
+    new_nodes: list[LineageNode] = []
+    new_edges: list[LineageEdge] = []
+    for e in graph.edges:
+        if e.edge_type != EdgeType.COPIES_TO:
+            continue
+        src_tbl = alias_for.get(e.source_id)   # SQL source behind the source dataset
+        sink_tbl = alias_for.get(e.target_id)  # external table behind the sink dataset
+        if not src_tbl or not sink_tbl:
+            continue
+        if has_col_by_owner.get(sink_tbl):
+            continue  # sink already has a real schema — don't fabricate
+        src_cols = has_col_by_owner.get(src_tbl, [])
+        if not src_cols:
+            continue
+        for src_col_id in src_cols:
+            col_name = src_col_id.split(".")[-1]
+            sink_col_id = f"{sink_tbl}.{col_name}"
+            new_nodes.append(LineageNode(
+                id=sink_col_id, name=col_name, node_type=NodeType.COLUMN,
+                metadata={"table": sink_tbl, "source": "inferred-copy"},
+            ))
+            new_edges.append(LineageEdge(
+                source_id=sink_tbl, target_id=sink_col_id, edge_type=EdgeType.HAS_COLUMN,
+                confidence=0.9, metadata={"source": "inferred-copy"},
+            ))
+            new_edges.append(LineageEdge(
+                source_id=sink_col_id, target_id=src_col_id, edge_type=EdgeType.DERIVES_FROM,
+                transformation="1:1 ADF copy (inferred)", confidence=0.9,
+                metadata={"source": "inferred-copy"},
+            ))
+
+    if new_nodes:
+        graph.nodes.extend(new_nodes)
+        graph.edges.extend(new_edges)
+        logger.info("Inferred %d export-sink columns (1:1 copy) from SQL sources", len(new_nodes))
 
 
 def _propagate_copy_source_columns(graph: LineageGraph) -> None:

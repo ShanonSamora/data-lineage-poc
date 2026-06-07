@@ -27,7 +27,7 @@ from collections import defaultdict, deque
 from pathlib import Path
 
 from fastapi import FastAPI, HTTPException, Query, Request
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, Response
 from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel as PydanticBaseModel
 
@@ -150,9 +150,27 @@ async def _check_llm_config():
         logger.info("OpenAI model %r configured for LLM fallback.", settings.openai_model)
 
 
+# Lineage-themed favicon: two source nodes deriving into one. Served directly so any
+# client probing /favicon.ico gets a 200 instead of cluttering the logs with a 404.
+_FAVICON_SVG = (
+    '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">'
+    '<rect width="32" height="32" rx="7" fill="#0f172a"/>'
+    '<path d="M8.5 8.5 L21 16 M8.5 23.5 L21 16" stroke="#475569" stroke-width="2" '
+    'fill="none" stroke-linecap="round"/>'
+    '<circle cx="8.5" cy="8.5" r="3.4" fill="#60a5fa"/>'
+    '<circle cx="8.5" cy="23.5" r="3.4" fill="#34d399"/>'
+    '<circle cx="22" cy="16" r="4.2" fill="#a78bfa"/></svg>'
+)
+
+
 @app.get("/", response_class=HTMLResponse)
 async def web_ui(request: Request):
     return templates.TemplateResponse(name="index.html", context={"request": request}, request=request)
+
+
+@app.get("/favicon.ico", include_in_schema=False)
+async def favicon():
+    return Response(content=_FAVICON_SVG, media_type="image/svg+xml")
 
 
 @app.post("/analyze")
@@ -199,10 +217,9 @@ async def get_upstream(node_id: str, depth: int = Query(default=10, ge=1, le=50)
     forward, _reverse, nodes_by_id = _build_adjacency()
     if node_id not in nodes_by_id:
         raise HTTPException(status_code=404, detail=f"Node not found: {node_id}")
-    result = _bfs(node_id, forward, nodes_by_id, depth)
-    if len(result["nodes"]) <= 1:
-        raise HTTPException(status_code=404, detail=f"No upstream found for '{node_id}'")
-    return result
+    # A node that exists but has no upstream (e.g. a raw source) is a valid 200 with just
+    # itself — not a 404, which would be indistinguishable from "node not found".
+    return _bfs(node_id, forward, nodes_by_id, depth)
 
 
 @app.get("/downstream/{node_id:path}")
@@ -211,10 +228,9 @@ async def get_downstream(node_id: str, depth: int = Query(default=10, ge=1, le=5
     _forward, reverse, nodes_by_id = _build_adjacency()
     if node_id not in nodes_by_id:
         raise HTTPException(status_code=404, detail=f"Node not found: {node_id}")
-    result = _bfs(node_id, reverse, nodes_by_id, depth)
-    if len(result["nodes"]) <= 1:
-        raise HTTPException(status_code=404, detail=f"No downstream found for '{node_id}'")
-    return result
+    # A node that exists but has no downstream (e.g. a terminal report) is a valid 200 with
+    # just itself — not a 404, which would be indistinguishable from "node not found".
+    return _bfs(node_id, reverse, nodes_by_id, depth)
 
 
 @app.get("/impact/{node_id:path}")

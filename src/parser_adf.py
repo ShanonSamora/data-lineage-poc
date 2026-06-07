@@ -107,7 +107,9 @@ def _ref_name(ref: dict) -> str:
 def _parse_pipeline(doc: dict, file_path: Path, source_repo: str, repo_root: str | Path | None = None) -> LineageGraph:
     graph = LineageGraph()
     pipeline_name = _safe_name(doc, file_path.name)
-    file_id = file_node_id(file_path, repo_root, source_repo, prefix="file:")
+    # No "file:" prefix — keep ADF file ids consistent with the SQL/Python parsers
+    # ("{source_repo}/{relative-path}").
+    file_id = file_node_id(file_path, repo_root, source_repo)
 
     # Pipeline node
     pipeline_node = LineageNode(

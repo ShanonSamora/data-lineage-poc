@@ -211,64 +211,37 @@ def _link_procedures_to_outputs(content: str, graph: LineageGraph) -> None:
                 ))
                 existing.add(key)
 
-
-_PROC_DEF_RE = re.compile(
-    r"\bCREATE\s+(?:OR\s+REPLACE\s+)?(?:PROCEDURE|FUNCTION)\s+([A-Za-z0-9_.\"]+)",
-    re.IGNORECASE,
-)
-
-
-def _link_procedures_to_outputs(content: str, graph: LineageGraph) -> None:
-    """Connect a stored-procedure node to the tables it builds.
-
-    The LLM extracts a procedure's column lineage but attributes the WRITES_TO /
-    DERIVES_FROM edges to the *source* tables, leaving the PROCEDURE node (created by the
-    ADF parser from a pipeline's stored-procedure activity) with no link to the table it
-    actually populates. We find each CREATE PROCEDURE/FUNCTION in the file and add a
-    WRITES_TO edge from it to every table DEFINED_IN the same file, so the orchestration
-    chain (pipeline → procedure → table) connects instead of dead-ending. The procedure id
-    matches the ADF parser's convention (schema dropped, lowercased) so the nodes merge.
-    """
-    from src.models import EdgeType, LineageEdge, LineageNode, NodeType
-
-    proc_ids = [
-        m.group(1).replace('"', "").split(".")[-1].lower()
-        for m in _PROC_DEF_RE.finditer(content)
-    ]
-    proc_ids = [p for p in proc_ids if p]
-    if not proc_ids:
-        return
-
-    node_type = {n.id: n.node_type for n in graph.nodes}
-    # Tables the procedure *writes* are the targets of the WRITES_TO edges the LLM produced
-    # for its INSERT/UPDATE statements (e.g. "<source> WRITES_TO rpt_monthly_summary").
-    # Using WRITES_TO targets — not every table DEFINED_IN the file — avoids wrongly linking
-    # the procedure to the source tables it only reads.
-    output_tables = {
-        e.target_id for e in graph.edges
-        if e.edge_type == EdgeType.WRITES_TO
-        and node_type.get(e.target_id) in (NodeType.TABLE, NodeType.VIEW)
-    }
-    if not output_tables:
-        return
-
-    existing = {(e.source_id, e.target_id, e.edge_type) for e in graph.edges}
-    have_node = {n.id for n in graph.nodes}
-    for proc_id in proc_ids:
-        if proc_id not in have_node:
-            graph.nodes.append(LineageNode(
-                id=proc_id, name=proc_id, node_type=NodeType.PROCEDURE,
-                metadata={"source": "sql-procedure"},
-            ))
-            have_node.add(proc_id)
-        for tbl in output_tables:
-            key = (proc_id, tbl, EdgeType.WRITES_TO)
-            if key not in existing:
-                graph.edges.append(LineageEdge(
-                    source_id=proc_id, target_id=tbl, edge_type=EdgeType.WRITES_TO,
-                    transformation="stored procedure output",
+    # Surface columns the proc's INSERT lists that the LLM dropped because they have no source
+    # (e.g. a literal/constant like report_month := v_start_date). They belong to the table's
+    # schema even without column lineage.
+    has_col = {(e.source_id, e.target_id) for e in graph.edges if e.edge_type == EdgeType.HAS_COLUMN}
+    existing_ids = {n.id for n in graph.nodes}
+    for tbl in output_tables:
+        for col_name in _insert_columns(content, tbl):
+            col_id = f"{tbl}.{col_name}"
+            if (tbl, col_id) in has_col:
+                continue
+            if col_id not in existing_ids:
+                graph.nodes.append(LineageNode(
+                    id=col_id, name=col_name, node_type=NodeType.COLUMN,
+                    metadata={"table": tbl, "source": "unmapped"},
                 ))
-                existing.add(key)
+                existing_ids.add(col_id)
+            graph.edges.append(LineageEdge(
+                source_id=tbl, target_id=col_id, edge_type=EdgeType.HAS_COLUMN,
+            ))
+            has_col.add((tbl, col_id))
+
+
+def _insert_columns(content: str, table: str) -> list[str]:
+    """Best-effort column list from ``INSERT INTO <table> (col, col, ...)``."""
+    m = re.search(
+        r"INSERT\s+INTO\s+(?:[A-Za-z0-9_]+\.)?" + re.escape(table) + r"\s*\(([^)]*)\)",
+        content, re.IGNORECASE,
+    )
+    if not m:
+        return []
+    return [c.strip().strip('"').lower() for c in m.group(1).split(",") if c.strip()]
 
 
 def _analyze_python(
@@ -440,6 +413,15 @@ def analyze_multiple_repos(
     # Single prune pass on the fully-merged graph.
     _prune_dead_nodes(graph)
 
+    # Normalize table→table WRITES_TO (the LLM's way of modelling a proc's INSERT) into
+    # READS_FROM, so table data-flow uses one convention (consumer READS_FROM producer),
+    # consistent with the SQL views. Process→table WRITES_TO (proc/pipeline/notebook) stay.
+    _normalize_table_writes_to_reads(graph)
+
+    # Merge the ADF notebook FILE node into the matching parsed source-file node, so the
+    # Python step is a single node (pipeline → notebook → output) instead of two.
+    _merge_notebook_file_nodes(graph)
+
     # Propagate columns onto raw-source ADF datasets (Blob CSV/parquet) from the
     # staging table they copy into. Their JSON declares only file location, but
     # in practice they carry the same schema as the sink they land in.
@@ -454,6 +436,92 @@ def analyze_multiple_repos(
         len(repo_sources), len(graph.nodes), len(graph.edges),
     )
     return graph
+
+
+def _normalize_table_writes_to_reads(graph: LineageGraph) -> None:
+    """Rewrite table→table WRITES_TO edges as READS_FROM (target reads source).
+
+    The LLM models a stored proc's INSERT as ``<source> WRITES_TO <target>``, whereas the SQL
+    parser models a view as ``<target> READS_FROM <source>``. Standardize on READS_FROM for
+    pure data-flow between tables/views, so the two halves are consistent and not redundant
+    with the proc→table orchestration edge. Edges whose source is a process node
+    (PROCEDURE / PYTHON_FUNCTION / FILE / ADF_*) keep WRITES_TO — those are genuine writers.
+    """
+    from src.models import EdgeType, LineageEdge, NodeType
+
+    ntype = {n.id: n.node_type for n in graph.nodes}
+    TABLELIKE = {NodeType.TABLE, NodeType.VIEW}
+    keep: list[LineageEdge] = []
+    converted = 0
+    existing_reads = {
+        (e.source_id, e.target_id) for e in graph.edges if e.edge_type == EdgeType.READS_FROM
+    }
+    for e in graph.edges:
+        if (e.edge_type == EdgeType.WRITES_TO
+                and ntype.get(e.source_id) in TABLELIKE
+                and ntype.get(e.target_id) in TABLELIKE):
+            if (e.target_id, e.source_id) not in existing_reads:
+                keep.append(LineageEdge(
+                    source_id=e.target_id, target_id=e.source_id,
+                    edge_type=EdgeType.READS_FROM,
+                    transformation=e.transformation, confidence=e.confidence,
+                    metadata=e.metadata,
+                ))
+                existing_reads.add((e.target_id, e.source_id))
+                converted += 1
+            # original table→table WRITES_TO is dropped
+        else:
+            keep.append(e)
+    if converted:
+        graph.edges = keep
+        logger.info("Normalized %d table WRITES_TO edges to READS_FROM", converted)
+
+
+def _merge_notebook_file_nodes(graph: LineageGraph) -> None:
+    """Merge an ADF notebook FILE node into the parsed source-file node for the same file.
+
+    A pipeline's notebook activity creates a FILE node from the raw ``notebookPath`` (e.g.
+    ``sample_repo_python\\transform_pipeline.py``), which doesn't match the id the Python
+    parser produces for the same file (``python/transform_pipeline.py``). They refer to the
+    same notebook, so we redirect the ADF node's edges onto the parsed node (matched by
+    basename) and drop the duplicate — giving one node: pipeline → notebook → its output.
+    """
+    from src.models import NodeType
+
+    def base(nid: str) -> str:
+        return nid.replace("\\", "/").rsplit("/", 1)[-1].lower()
+
+    file_nodes = [n for n in graph.nodes if n.node_type == NodeType.FILE]
+    by_base: dict[str, list] = {}
+    for n in file_nodes:
+        by_base.setdefault(base(n.id), []).append(n)
+
+    remap: dict[str, str] = {}
+    for nb in file_nodes:
+        if (nb.metadata or {}).get("source") != "adf-notebook":
+            continue
+        targets = [n for n in by_base.get(base(nb.id), [])
+                   if n.id != nb.id and (n.metadata or {}).get("source") != "adf-notebook"]
+        if targets:
+            remap[nb.id] = targets[0].id
+
+    if not remap:
+        return
+    graph.nodes = [n for n in graph.nodes if n.id not in remap]
+    seen: set = set()
+    new_edges = []
+    for e in graph.edges:
+        e.source_id = remap.get(e.source_id, e.source_id)
+        e.target_id = remap.get(e.target_id, e.target_id)
+        if e.source_id == e.target_id:
+            continue
+        key = (e.source_id, e.target_id, e.edge_type)
+        if key in seen:
+            continue
+        seen.add(key)
+        new_edges.append(e)
+    graph.edges = new_edges
+    logger.info("Merged %d ADF notebook file node(s) into parsed file nodes", len(remap))
 
 
 def _propagate_copy_sink_columns(graph: LineageGraph) -> None:
@@ -517,16 +585,17 @@ def _propagate_copy_sink_columns(graph: LineageGraph) -> None:
 
 
 def _propagate_copy_source_columns(graph: LineageGraph) -> None:
-    """For each ADF_DATASET with no HAS_COLUMN edges, inherit columns from its COPIES_TO sink.
+    """Give each raw-source ADF dataset its own columns, inferred 1:1 from the staging table
+    it copies into.
 
-    Raw blob datasets (CSV, parquet) declare a file location but no schema. The sink
-    they get copied into is usually a SQL-backed dataset aliased to a staging table
-    that does have a full schema. We add HAS_COLUMN edges from the source dataset
-    to those staging columns so the source dataset surfaces a schema in the UI and
-    JSON export. The propagated edges are tagged ``metadata.source = "propagated"``
-    and given confidence 0.9 so they're distinguishable from deterministic schemas.
+    Raw blob datasets (CSV, parquet) declare a file location but no schema. The sink they get
+    copied into is a SQL-backed dataset aliased to a staging table with a full schema. A Copy
+    with no explicit mapping moves columns 1:1, so we mint a column on the blob for each
+    staging column and add a DERIVES_FROM (staging column ← blob column) — mirroring the
+    export-sink inference — so the ingest shows as column-level lineage (dashed, inferred,
+    confidence 0.9) instead of a schema preview with no arrows.
     """
-    from src.models import EdgeType, LineageEdge, NodeType
+    from src.models import EdgeType, LineageEdge, LineageNode, NodeType
 
     # Index HAS_COLUMN edges by source (the owning table/dataset).
     has_col_by_owner: dict[str, list[str]] = {}
@@ -546,7 +615,12 @@ def _propagate_copy_source_columns(graph: LineageGraph) -> None:
         if e.edge_type == EdgeType.READS_FROM and "ADF dataset" in (e.transformation or ""):
             alias_for[e.source_id] = e.target_id
 
+    new_nodes: list[LineageNode] = []
     new_edges: list[LineageEdge] = []
+    seen_has_col = {
+        (e.source_id, e.target_id) for e in graph.edges if e.edge_type == EdgeType.HAS_COLUMN
+    }
+    existing_ids = {n.id for n in graph.nodes}
     for node in graph.nodes:
         if node.node_type != NodeType.ADF_DATASET:
             continue
@@ -554,31 +628,34 @@ def _propagate_copy_source_columns(graph: LineageGraph) -> None:
             continue  # already has its own columns
         if node.id in alias_for:
             continue  # SQL-backed datasets surface columns via alias resolution
-        # Follow COPIES_TO -> sink dataset -> (alias) -> physical table
+        # Follow COPIES_TO -> sink dataset -> (alias) -> physical staging table.
         for sink_id in copies_to_by_source.get(node.id, []):
-            cols = has_col_by_owner.get(sink_id) or has_col_by_owner.get(alias_for.get(sink_id, ""), [])
-            for col_id in cols:
+            staging_cols = has_col_by_owner.get(sink_id) or has_col_by_owner.get(alias_for.get(sink_id, ""), [])
+            for staging_col in staging_cols:
+                col_name = staging_col.split(".")[-1]
+                blob_col = f"{node.id}.{col_name}"
+                if (node.id, blob_col) in seen_has_col:
+                    continue
+                seen_has_col.add((node.id, blob_col))
+                if blob_col not in existing_ids:
+                    new_nodes.append(LineageNode(
+                        id=blob_col, name=col_name, node_type=NodeType.COLUMN,
+                        metadata={"table": node.id, "source": "inferred-copy"},
+                    ))
+                    existing_ids.add(blob_col)
+                # The blob owns the column ...
                 new_edges.append(LineageEdge(
-                    source_id=node.id,
-                    target_id=col_id,
-                    edge_type=EdgeType.HAS_COLUMN,
-                    transformation=f"inherited from {sink_id}",
-                    confidence=0.9,
-                    metadata={"source": "propagated"},
+                    source_id=node.id, target_id=blob_col, edge_type=EdgeType.HAS_COLUMN,
+                    confidence=0.9, metadata={"source": "inferred-copy"},
+                ))
+                # ... and the staging column is its 1:1 inferred copy.
+                new_edges.append(LineageEdge(
+                    source_id=staging_col, target_id=blob_col, edge_type=EdgeType.DERIVES_FROM,
+                    transformation="1:1 ADF copy (inferred)", confidence=0.9,
+                    metadata={"source": "inferred-copy"},
                 ))
 
-    if new_edges:
-        # Deduplicate (source, target, type) — a Blob dataset may copy to multiple sinks.
-        seen: set[tuple[str, str, str]] = set()
-        for existing in graph.edges:
-            if existing.edge_type == EdgeType.HAS_COLUMN:
-                seen.add((existing.source_id, existing.target_id, existing.edge_type.value))
-        added = 0
-        for e in new_edges:
-            key = (e.source_id, e.target_id, e.edge_type.value)
-            if key not in seen:
-                seen.add(key)
-                graph.edges.append(e)
-                added += 1
-        if added:
-            logger.info("Propagated %d HAS_COLUMN edges to raw-source ADF datasets", added)
+    if new_nodes or new_edges:
+        graph.nodes.extend(new_nodes)
+        graph.edges.extend(new_edges)
+        logger.info("Inferred %d raw-source columns (1:1 copy) for ADF blob datasets", len(new_nodes))

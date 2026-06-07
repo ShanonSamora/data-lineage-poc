@@ -4,11 +4,29 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Data Lineage Explorer</title>
+    <!-- Inline SVG favicon: two source nodes (blue/green) deriving into one node (purple) — a lineage glyph.
+         Embedded as a data URI so the browser never requests /favicon.ico (avoids the 404 in server logs). -->
+    <link rel="icon" type="image/svg+xml" href="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAzMiAzMiI+PHJlY3Qgd2lkdGg9IjMyIiBoZWlnaHQ9IjMyIiByeD0iNyIgZmlsbD0iIzBmMTcyYSIvPjxwYXRoIGQ9Ik04LjUgOC41IEwyMSAxNiBNOC41IDIzLjUgTDIxIDE2IiBzdHJva2U9IiM0NzU1NjkiIHN0cm9rZS13aWR0aD0iMiIgZmlsbD0ibm9uZSIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIi8+PGNpcmNsZSBjeD0iOC41IiBjeT0iOC41IiByPSIzLjQiIGZpbGw9IiM2MGE1ZmEiLz48Y2lyY2xlIGN4PSI4LjUiIGN5PSIyMy41IiByPSIzLjQiIGZpbGw9IiMzNGQzOTkiLz48Y2lyY2xlIGN4PSIyMiIgY3k9IjE2IiByPSI0LjIiIGZpbGw9IiNhNzhiZmEiLz48L3N2Zz4=">
     <script src="https://cdn.jsdelivr.net/npm/vis-network@9.1.6/standalone/umd/vis-network.min.js"></script>
     <link href="https://cdn.jsdelivr.net/npm/vis-network@9.1.6/dist/vis-network.min.css" rel="stylesheet">
     <style>
         * { box-sizing: border-box; margin: 0; padding: 0; }
         body { font-family: 'Segoe UI', system-ui, -apple-system, sans-serif; background: #0f172a; color: #e2e8f0; }
+
+        /* ── Scrollbars (modern, minimalistic) ──
+           Thin rounded thumbs that recede into the dark theme and brighten on hover.
+           Firefox uses scrollbar-width/color; WebKit/Chromium uses the ::-webkit pseudos.
+           The transparent border + padding-box clip gives the thumb breathing room so it
+           reads as a floating pill rather than a chunky bar. */
+        * { scrollbar-width: thin; scrollbar-color: #475569 transparent; }
+        ::-webkit-scrollbar { width: 10px; height: 10px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb {
+            background: #475569; border-radius: 8px;
+            border: 2px solid transparent; background-clip: padding-box;
+        }
+        ::-webkit-scrollbar-thumb:hover { background: #64748b; background-clip: padding-box; }
+        ::-webkit-scrollbar-corner { background: transparent; }
 
         /* ── Header ── */
         .header {
@@ -90,13 +108,21 @@
         .catalog-empty { color: #475569; font-size: 12px; padding: 8px; }
         .table-card {
             background: #111827; border: 1px solid #1f2937; border-radius: 8px;
-            overflow: hidden; transition: border-color 0.12s;
+            overflow: hidden; transition: border-color 0.12s, box-shadow 0.15s, background 0.12s;
         }
         .table-card:hover { border-color: #334155; }
+        /* Selected-node sync: the catalog card for whatever node is active anywhere in the
+           app (Flow View, Graph View, search) lights up with an accent ring + header tint. */
+        .table-card.cat-selected {
+            border-color: #2563eb;
+            box-shadow: 0 0 0 1px #1d4ed8, 0 6px 20px rgba(29,78,216,0.18);
+        }
+        .table-card.cat-selected .table-title { background: #0f1d38; }
         .table-title {
             display: flex; align-items: center; justify-content: space-between; gap: 8px;
-            cursor: pointer; padding: 8px 10px; background: #0b1220;
+            cursor: pointer; padding: 8px 10px; background: #0b1220; transition: background 0.12s;
         }
+        .table-title:hover { background: #0f1a2e; }
         .table-title .name { font-size: 12px; color: #e2e8f0; font-weight: 600; }
         .table-title .type { font-size: 10px; color: #64748b; text-transform: uppercase; }
         .column-list { display: flex; flex-wrap: wrap; gap: 4px; padding: 6px 8px; }
@@ -105,6 +131,10 @@
             font-size: 10px; color: #94a3b8; cursor: pointer; transition: all 0.1s;
         }
         .column-item:hover { border-color: #38bdf8; color: #bae6fd; }
+        /* A specific selected column (e.g. clicked in Flow View) gets the purple column accent. */
+        .column-item.cat-selected {
+            border-color: #a78bfa; color: #ddd6fe; background: #2d1b4e;
+        }
 
         /* ── Sidebar ── */
         .sidebar {
@@ -304,12 +334,6 @@
         <button class="btn" id="toggle-llm" onclick="toggleLlmOnly()" aria-label="Filter to LLM-inferred edges only">LLM Only: Off</button>
         <button class="btn" id="btn-download" onclick="downloadGraphJson()" aria-label="Download the full lineage graph as JSON" title="Download the full lineage graph as JSON">Download JSON</button>
         <button class="btn" onclick="resetView()" aria-label="Reset view to full graph">Reset</button>
-        <div style="margin-left:auto">
-            <div class="catalog-header" style="margin:0">
-                <button class="btn btn-mini btn-active" id="lineage-upstream" onclick="setLineageMode('upstream')">Upstream</button>
-                <button class="btn btn-mini" id="lineage-downstream" onclick="setLineageMode('downstream')">Downstream</button>
-            </div>
-        </div>
     </div>
 
     <div class="main" id="main-layout">
@@ -395,7 +419,6 @@
     let visLoadPromise = null;
     let allData = { nodes: [], edges: [] };
     let viewData = { nodes: [], edges: [] };
-    let lineageMode = 'upstream';
     let llmOnly = false;
     let catalogVisible = true;
     let currentView = 'flow';
@@ -470,15 +493,19 @@
         return n && (n.node_type === 'TABLE' || n.node_type === 'VIEW');
     }
     function tableFromColumnId(colId) {
+        // Owner = everything before the LAST dot (column names have no dots). Splitting on the
+        // last dot — not the first — keeps dataset-owned column ids like
+        // "adf.dataset.BlobCustomersCSV.customer_id" resolving to their real node id.
         if (!colId) return '';
-        const idx = String(colId).indexOf('.');
-        return idx > 0 ? colId.slice(0, idx) : '';
+        const idx = String(colId).lastIndexOf('.');
+        return idx > 0 ? String(colId).slice(0, idx) : '';
     }
     function getColumnTableName(node) {
         const mt = getMetaValue(node.metadata, 'table');
         if (mt) return mt;
-        if (node.id && node.id.includes('.')) return node.id.split('.')[0];
-        return '';
+        const id = node.id || '';
+        const idx = id.lastIndexOf('.');
+        return idx > 0 ? id.slice(0, idx) : '';
     }
 
     // Resolve a table/dataset's columns by consulting BOTH the column-node
@@ -561,12 +588,6 @@
         const btn = document.getElementById('toggle-catalog');
         if (btn) btn.textContent = catalogVisible ? 'Hide Catalog' : 'Show Catalog';
     }
-    function setLineageMode(dir) {
-        lineageMode = dir;
-        document.getElementById('lineage-upstream').classList.toggle('btn-active', dir === 'upstream');
-        document.getElementById('lineage-downstream').classList.toggle('btn-active', dir === 'downstream');
-    }
-
     function buildCatalog(data) {
         const container = document.getElementById('catalog-body');
         const meta = document.getElementById('catalog-meta');
@@ -629,14 +650,14 @@
             // searchText concatenates table name + every column name (lowercase) for the live filter.
             const searchText = (t.name + ' ' + t.id + ' ' + cols.map(c => c.name || c.id).join(' ')).toLowerCase();
             const cardTypeStr = nt.replace('_', ' ');
-            html += `<div class="table-card" data-search-text="${escAttr(searchText)}" data-node-type="${escAttr(nt)}">
+            html += `<div class="table-card" data-node-id="${escAttr(t.id)}" data-search-text="${escAttr(searchText)}" data-node-type="${escAttr(nt)}">
                 <div class="table-title" onclick="catalogSelect('${escAttr(t.id)}')">
                     <div class="name">${escHtml(t.name)}</div>
                     <span class="${typeClass}">${escHtml(cardTypeStr)}</span>
                 </div>
                 <div class="column-list">`;
             for (const col of cols.slice(0, 40)) {
-                html += `<div class="column-item" onclick="catalogSelect('${escAttr(col.id)}')">${escHtml(col.name || col.id)}</div>`;
+                html += `<div class="column-item" data-col-id="${escAttr(col.id)}" onclick="catalogSelect('${escAttr(col.id)}')">${escHtml(col.name || col.id)}</div>`;
             }
             if (cols.length > 40) html += `<div class="column-item" style="cursor:default">+${cols.length - 40}</div>`;
             html += `</div></div>`;
@@ -648,6 +669,8 @@
 
         // Re-apply current filters.
         applyCatalogFilters();
+        // Catalog DOM was just rebuilt — restore the selected-node highlight.
+        highlightCatalogSelection(lastSelectedNodeId);
     }
 
     function renderTypeFilter(tables) {
@@ -714,8 +737,65 @@
         showNodeDetail(nodeId);
         if (currentView === 'flow') {
             renderFlowView(nodeId);
-        } else {
-            traceLineage(nodeId, lineageMode);
+        } else if (network) {
+            // Graph view: focus and select the clicked node. Directional lineage tracing
+            // lives on the node-detail ↑ Upstream / ↓ Downstream buttons.
+            try {
+                network.selectNodes([nodeId]);
+                network.focus(nodeId, { scale: 1.1, animation: true });
+            } catch (e) { /* node may be absent from the current (e.g. LLM-only) subgraph */ }
+        }
+    }
+
+    // ── Catalog selection sync ─────────────────────────────────────────
+    // Keep the catalog visually in sync with whatever node is selected anywhere in the
+    // app (catalog click, Flow card, graph node, search). Resolves a column id to its
+    // owning table card, highlights the card (plus the specific column chip when a column
+    // is selected), and nudges it into view within the catalog panel.
+    function highlightCatalogSelection(nodeId) {
+        document.querySelectorAll('#catalog-body .cat-selected')
+            .forEach(el => el.classList.remove('cat-selected'));
+        if (!nodeId) return;
+
+        const node = allData.nodes.find(n => n.id === nodeId);
+        const isColumn = node && node.node_type === 'COLUMN';
+        const ownerId = isColumn ? (getColumnTableName(node) || tableFromColumnId(nodeId)) : nodeId;
+
+        let card = ownerId
+            ? document.querySelector(`#catalog-body .table-card[data-node-id="${cssEsc(ownerId)}"]`)
+            : null;
+        // Fallback: locate the card that actually owns the column chip if the id heuristic missed.
+        if (!card && isColumn) {
+            const colEl = document.querySelector(`#catalog-body .column-item[data-col-id="${cssEsc(nodeId)}"]`);
+            card = colEl ? colEl.closest('.table-card') : null;
+        }
+        if (!card) return;
+
+        card.classList.add('cat-selected');
+        if (isColumn) {
+            const colEl = card.querySelector(`.column-item[data-col-id="${cssEsc(nodeId)}"]`);
+            if (colEl) colEl.classList.add('cat-selected');
+        }
+        scrollCatalogToCard(card);
+    }
+
+    // Escape a value for use inside a CSS attribute selector — node ids contain dots and
+    // other characters that would otherwise break querySelector.
+    function cssEsc(s) {
+        if (window.CSS && CSS.escape) return CSS.escape(String(s));
+        return String(s).replace(/["\\\]]/g, '\\$&');
+    }
+
+    // Scroll the catalog panel (never the page) just enough to bring the card into view.
+    function scrollCatalogToCard(card) {
+        const panel = document.getElementById('catalog-panel');
+        if (!panel || !card || panel.offsetParent === null) return;  // panel hidden → no-op
+        const pr = panel.getBoundingClientRect();
+        const cr = card.getBoundingClientRect();
+        if (cr.top < pr.top) {
+            panel.scrollTop -= (pr.top - cr.top) + 12;
+        } else if (cr.bottom > pr.bottom) {
+            panel.scrollTop += (cr.bottom - pr.bottom) + 12;
         }
     }
 
@@ -1285,6 +1365,7 @@
         const node = allData.nodes.find(n => n.id === nodeId);
         if (!node) return;
         lastSelectedNodeId = nodeId;
+        highlightCatalogSelection(nodeId);
 
         const nt = node.node_type || 'TABLE';
         const badgeClass = 'badge badge-' + nt.toLowerCase().replace(/_/g, '-');
@@ -1406,6 +1487,7 @@
         } else if (network) {
             network.selectNodes(matching.map(n => n.id));
             network.focus(matching[0].id, { scale: 1.2, animation: true });
+            showNodeDetail(matching[0].id);
             toast(`Found ${matching.length} nodes`);
         }
     }

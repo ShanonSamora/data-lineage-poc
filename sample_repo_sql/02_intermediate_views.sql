@@ -20,7 +20,7 @@ JOIN stg_accounts a ON a.customer_id = c.customer_id
 JOIN stg_branches b ON b.branch_id = a.branch_id;
 
 
--- Daily account balances with USD normalization
+-- Daily account balances with USD normalization (USD amounts rounded to 2 dp)
 CREATE VIEW int_daily_balances AS
 SELECT
     t.account_id,
@@ -33,13 +33,13 @@ SELECT
             ELSE 0
         END
     )                                           AS daily_net_amount,
-    SUM(
+    ROUND(SUM(
         CASE
             WHEN t.transaction_type = 'CREDIT' THEN t.amount * er.rate
             WHEN t.transaction_type = 'DEBIT'  THEN -t.amount * er.rate
             ELSE 0
         END
-    )                                           AS daily_net_amount_usd
+    ), 2)                                       AS daily_net_amount_usd
 FROM stg_transactions t
 LEFT JOIN stg_exchange_rates er
     ON er.rate_date = CAST(t.transaction_date AS DATE)
